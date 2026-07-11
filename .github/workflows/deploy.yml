@@ -26,9 +26,7 @@ jobs:
       - run: npm ci
       - name: Build
         env:
-          # Set these in repo Settings → Secrets and variables → Actions → Variables
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          # Supabase values come from the committed .env.production (public-safe).
           # Repo name for the Pages base path, e.g. /cti-sign/
           VITE_BASE: /${{ github.event.repository.name }}/
         run: npm run build

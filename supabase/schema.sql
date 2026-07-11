@@ -68,6 +68,7 @@ create table if not exists records (
   status          record_status not null default 'draft',
   token           text not null unique default encode(gen_random_bytes(24), 'hex'),
   signed_pdf_path text,                          -- path within `signed` bucket
+  onedrive_url    text,                           -- web link to the OneDrive/SharePoint copy
   message         text default '',               -- optional note shown to signer
   sent_at         timestamptz,
   viewed_at       timestamptz,

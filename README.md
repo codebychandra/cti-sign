@@ -52,6 +52,29 @@ supabase secrets set SIGN_FROM_EMAIL="CTI Sign <no-reply@cti-usa.com>"
 > Until `RESEND_API_KEY` is set, "Send" still works — it just marks the record
 > Sent and you share the copyable link manually.
 
+### 3b. (Optional) Auto-save signed PDFs to OneDrive / SharePoint
+Completed PDFs are always stored in Supabase. To *also* drop a copy into OneDrive
+automatically, register an app in Microsoft Entra (Azure AD) — a Microsoft 365
+admin does this once:
+1. **Entra admin center → App registrations → New registration.** Name it "CTI Sign".
+2. **API permissions → Add → Microsoft Graph → Application permissions →
+   `Files.ReadWrite.All`** → then **Grant admin consent**.
+3. **Certificates & secrets → New client secret** → copy the secret *value*.
+4. **Overview** → copy the **Application (client) ID** and **Directory (tenant) ID**.
+5. Set the Supabase secrets:
+   ```bash
+   supabase secrets set MS_TENANT_ID=...        # Directory (tenant) ID
+   supabase secrets set MS_CLIENT_ID=...         # Application (client) ID
+   supabase secrets set MS_CLIENT_SECRET=...     # secret value
+   supabase secrets set ONEDRIVE_USER=cti-it-team@cti-usa.com   # OneDrive owner
+   supabase secrets set ONEDRIVE_FOLDER="CTI Sign/Signed"       # optional
+   ```
+   For a SharePoint document library instead of a user's OneDrive, set
+   `ONEDRIVE_SITE_ID=<site-id>` in place of `ONEDRIVE_USER`.
+
+Until these are set, signing works normally — the OneDrive copy is simply skipped.
+When set, each completed record also shows an "Open copy in OneDrive" link.
+
 ### 4. Deploy to GitHub Pages
 1. Push this repo to GitHub.
 2. **Settings → Pages** → Source: **GitHub Actions**.

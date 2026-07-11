@@ -106,9 +106,21 @@ export function RecordDetail() {
           <h3 className="font-heading font-bold text-cti-black">Actions</h3>
 
           {record.status === 'completed' ? (
-            <button className="btn-primary w-full" onClick={download}>
-              ⬇ Download signed PDF
-            </button>
+            <>
+              <button className="btn-primary w-full" onClick={download}>
+                ⬇ Download signed PDF
+              </button>
+              {record.onedrive_url && (
+                <a
+                  href={record.onedrive_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost w-full"
+                >
+                  Open copy in OneDrive ↗
+                </a>
+              )}
+            </>
           ) : (
             <>
               <button className="btn-primary w-full" onClick={send} disabled={busy}>

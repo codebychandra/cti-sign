@@ -1,0 +1,11 @@
+# Supabase CLI config. The signer-facing functions must be PUBLIC (no JWT);
+# the staff send function keeps JWT verification on.
+
+[functions.signing-session]
+verify_jwt = false
+
+[functions.submit-signature]
+verify_jwt = false
+
+[functions.send-signature-request]
+verify_jwt = true

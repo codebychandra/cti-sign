@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Open Sans', system-ui, sans-serif;
+  }
+  body {
+    @apply bg-cti-bg text-cti-ink antialiased;
+  }
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Montserrat', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-cti-red text-white hover:bg-cti-redDark;
+  }
+  .btn-dark {
+    @apply btn bg-cti-black text-white hover:bg-black;
+  }
+  .btn-ghost {
+    @apply btn border border-cti-line bg-white text-cti-ink hover:bg-cti-bg;
+  }
+  .card {
+    @apply rounded-lg border border-cti-line bg-white shadow-sm;
+  }
+  .input {
+    @apply w-full rounded-md border border-cti-line px-3 py-2 text-sm
+           focus:border-cti-red focus:outline-none focus:ring-1 focus:ring-cti-red;
+  }
+  .label {
+    @apply mb-1 block text-sm font-semibold text-cti-ink;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+}

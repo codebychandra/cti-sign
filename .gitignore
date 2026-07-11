@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+supabase/.temp
+
+# TypeScript build artifacts emitted by `tsc -b` for the node config
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo

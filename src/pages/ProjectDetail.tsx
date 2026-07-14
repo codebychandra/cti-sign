@@ -28,7 +28,11 @@ export function ProjectDetail() {
     const [{ data: proj }, { data: fms }, { data: recs }] = await Promise.all([
       supabase.from('projects').select('*').eq('id', projectId).single(),
       supabase.from('forms').select('*').eq('project_id', projectId).order('created_at'),
-      supabase.from('records').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
+      supabase
+        .from('records')
+        .select('id, form_id, project_id, signer_name, signer_email, status, created_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false }),
     ])
     setProject(proj as Project)
     setForms((fms as Form[]) ?? [])

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { supabase, functionsBase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import type { Form, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
@@ -30,40 +30,24 @@ export function RecordDetail() {
 
   const signUrl = `${window.location.origin}${import.meta.env.BASE_URL}sign/${record.token}`
 
-  const send = async () => {
+  const markSent = async () => {
     setBusy(true)
     setMsg(null)
-    try {
-      const { data: sess } = await supabase.auth.getSession()
-      const res = await fetch(`${functionsBase}/send-signature-request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sess.session?.access_token}`,
-        },
-        body: JSON.stringify({ recordId: record.id, appUrl: `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, '') }),
-      })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error || 'Send failed')
-      setMsg('Signing request emailed to ' + record.signer_email)
-      load()
-    } catch (e) {
-      setMsg('Could not send email: ' + (e as Error).message + '. You can still copy the link below.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const markSent = async () => {
-    await supabase.from('records').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', record.id)
+    await supabase
+      .from('records')
+      .update({ status: 'sent', sent_at: new Date().toISOString() })
+      .eq('id', record.id)
+    setMsg('Marked as sent — copy the link below and send it to the signer (e.g. via Outlook).')
+    setBusy(false)
     load()
   }
 
   const download = async () => {
-    if (!record.signed_pdf_path) return
-    const { data, error } = await supabase.storage.from('signed').download(record.signed_pdf_path)
-    if (error || !data) return setMsg('Download failed: ' + error?.message)
-    const url = URL.createObjectURL(data)
+    if (!record.signed_pdf_data) return setMsg('No signed document found.')
+    const bin = atob(record.signed_pdf_data)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
     const a = document.createElement('a')
     a.href = url
     a.download = `${record.signer_name.replace(/\s+/g, '_')}_signed.pdf`
@@ -123,23 +107,23 @@ export function RecordDetail() {
             </>
           ) : (
             <>
-              <button className="btn-primary w-full" onClick={send} disabled={busy}>
-                {busy ? 'Sending…' : record.status === 'draft' ? 'Send for signature (email)' : 'Resend email'}
-              </button>
               <div>
-                <label className="label">Signing link (copy & send manually)</label>
+                <label className="label">Signing link — send this to the signer</label>
                 <div className="flex gap-2">
                   <input className="input font-mono text-xs" readOnly value={signUrl} />
                   <button className="btn-ghost whitespace-nowrap" onClick={copy}>
                     {copied ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
-                {record.status === 'draft' && (
-                  <button className="mt-2 text-xs text-cti-gray hover:text-cti-ink" onClick={markSent}>
-                    Mark as sent (without email)
-                  </button>
-                )}
+                <p className="mt-1 text-xs text-cti-gray">
+                  Paste it into an email to {record.signer_email}. They open it, sign, and it comes back here.
+                </p>
               </div>
+              {record.status === 'draft' && (
+                <button className="btn-primary w-full" onClick={markSent} disabled={busy}>
+                  {busy ? 'Saving…' : 'Mark as sent'}
+                </button>
+              )}
             </>
           )}
 

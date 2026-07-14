@@ -41,6 +41,7 @@ export interface SignRecord {
   status: RecordStatus
   token: string
   signed_pdf_path: string | null
+  signed_pdf_data?: string | null
   onedrive_url: string | null
   message: string
   sent_at: string | null

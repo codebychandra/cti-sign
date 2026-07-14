@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import SignatureCanvas from 'react-signature-canvas'
-import { functionsBase, isConfigured } from '../lib/supabase'
+import { supabase, isConfigured } from '../lib/supabase'
 import type { FormField } from '../lib/types'
 import { buildSignedPdf, renderPage } from '../lib/pdf'
 import { Logo } from '../components/Logo'
@@ -10,9 +10,8 @@ const RENDER_WIDTH = 720
 
 interface Session {
   record: { signer_name: string; signer_email: string; message: string; status: string }
-  form: { name: string; page_count: number }
+  form: { name: string; page_count: number; template_path: string }
   fields: FormField[]
-  templateUrl: string
 }
 
 export function SignPage() {
@@ -34,21 +33,25 @@ export function SignPage() {
     }
     ;(async () => {
       try {
-        const res = await fetch(`${functionsBase}/signing-session?token=${encodeURIComponent(token!)}`)
-        const body = await res.json()
-        if (!res.ok) throw new Error(body.error || 'Invalid or expired signing link')
-        setSession(body)
-        if (body.record.status === 'completed') setDone(true)
+        const { data, error } = await supabase.rpc('get_signing_session', { p_token: token })
+        if (error) throw new Error(error.message)
+        if (!data || data.error) throw new Error(data?.error || 'Invalid or expired signing link')
+        const s = data as Session
+        setSession(s)
+        if (s.record.status === 'completed') setDone(true)
         // prefill sensible defaults
         const today = new Date().toISOString().slice(0, 10)
         const seed: Record<string, string> = {}
-        for (const f of body.fields as FormField[]) {
+        for (const f of s.fields) {
           if (f.type === 'date') seed[f.id] = today
-          if (f.type === 'name') seed[f.id] = body.record.signer_name
-          if (f.type === 'email') seed[f.id] = body.record.signer_email
+          if (f.type === 'name') seed[f.id] = s.record.signer_name
+          if (f.type === 'email') seed[f.id] = s.record.signer_email
         }
         setValues(seed)
-        const tpl = await fetch(body.templateUrl)
+        const base = import.meta.env.VITE_SUPABASE_URL
+        const templateUrl = `${base}/storage/v1/object/public/templates/${s.form.template_path}`
+        const tpl = await fetch(templateUrl)
+        if (!tpl.ok) throw new Error('Could not load the document template')
         setPdfBytes(await tpl.arrayBuffer())
       } catch (e) {
         setError((e as Error).message)
@@ -73,17 +76,13 @@ export function SignPage() {
         .map((f) => ({ id: f.id, field_id: f.id, record_id: '', value: values[f.id] }))
       const signed = await buildSignedPdf(pdfBytes, session.fields, valueRows as any)
       const pdfBase64 = bytesToBase64(signed)
-      const res = await fetch(`${functionsBase}/submit-signature`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          values: session.fields.filter((f) => values[f.id]).map((f) => ({ field_id: f.id, value: values[f.id] })),
-          pdfBase64,
-        }),
+      const { data, error } = await supabase.rpc('submit_signature', {
+        p_token: token,
+        p_values: session.fields.filter((f) => values[f.id]).map((f) => ({ field_id: f.id, value: values[f.id] })),
+        p_pdf: pdfBase64,
       })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error || 'Submission failed')
+      if (error) throw new Error(error.message)
+      if (data?.error) throw new Error(data.error)
       setDone(true)
     } catch (e) {
       setError((e as Error).message)

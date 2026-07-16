@@ -46,7 +46,7 @@ export function RecordDetail() {
     load()
   }, [load])
 
-  if (!record) return <p className="text-cti-gray">Loading…</p>
+  if (!record) return <p className="text-cti-gray">Loading...</p>
 
   const signUrl = `${window.location.origin}${import.meta.env.BASE_URL}sign/${record.token}`
   const isCompleted = record.status === 'completed'
@@ -56,7 +56,7 @@ export function RecordDetail() {
     setBusy(true)
     setMsg(null)
     await supabase.from('records').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', record.id)
-    setMsg('Marked as sent — copy the link below and send it to the signer.')
+    setMsg('Marked as sent. Copy the link below and send it to the signer.')
     setBusy(false)
     load()
   }
@@ -111,7 +111,7 @@ export function RecordDetail() {
       <PageHeader
         title="Signature record"
         subtitle={form?.name}
-        actions={<Link to={`/projects/${record.project_id}`} className="btn-ghost">← Back to project</Link>}
+        actions={<Link to={`/projects/${record.project_id}`} className="btn-ghost">Back to project</Link>}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -130,8 +130,8 @@ export function RecordDetail() {
           {(isCompleted || isSubmitted) ? (
             <>
               <button className="btn-primary w-full" onClick={download}>Download signed PDF</button>
-              {isSubmitted && <button className="btn-dark w-full" onClick={markComplete} disabled={busy}>{busy ? 'Saving…' : 'Mark complete'}</button>}
-              {record.onedrive_url && <a href={record.onedrive_url} target="_blank" rel="noreferrer" className="btn-ghost w-full">Open copy in OneDrive ↗</a>}
+              {isSubmitted && <button className="btn-dark w-full" onClick={markComplete} disabled={busy}>{busy ? 'Saving...' : 'Mark complete'}</button>}
+              {record.onedrive_url && <a href={record.onedrive_url} target="_blank" rel="noreferrer" className="btn-ghost w-full">Open copy in OneDrive</a>}
             </>
           ) : (
             <>
@@ -143,7 +143,7 @@ export function RecordDetail() {
                 </div>
                 <p className="mt-1 text-xs text-cti-gray">Paste it into an email to {record.signer_email}.</p>
               </div>
-              {record.status === 'draft' && <button className="btn-primary w-full" onClick={markSent} disabled={busy}>{busy ? 'Saving…' : 'Mark as sent'}</button>}
+              {record.status === 'draft' && <button className="btn-primary w-full" onClick={markSent} disabled={busy}>{busy ? 'Saving...' : 'Mark as sent'}</button>}
             </>
           )}
           {msg && <p className="text-sm text-cti-ink">{msg}</p>}
@@ -161,16 +161,23 @@ export function RecordDetail() {
               {customFields.map((field) => (
                 <div key={field.id}>
                   <label className="label">{field.label}{field.required ? ' *' : ''}</label>
-                  <input className="input" type={field.type === 'text' ? 'text' : field.type} required={field.required} disabled={isCompleted} value={customValues[field.id] ?? ''} onChange={(e) => setCustomValues((values) => ({ ...values, [field.id]: e.target.value }))} />
+                  <input className="input" type={inputTypeForField(field)} required={field.required} disabled={isCompleted || field.type === 'auto_number'} value={customValues[field.id] ?? ''} onChange={(e) => setCustomValues((values) => ({ ...values, [field.id]: e.target.value }))} />
                 </div>
               ))}
             </div>
           )}
-          {customFields.length > 0 && !isCompleted && <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save record details'}</button>}
+          {customFields.length > 0 && !isCompleted && <button className="btn-primary" disabled={busy}>{busy ? 'Saving...' : 'Save record details'}</button>}
         </form>
       </section>
     </>
   )
+}
+
+function inputTypeForField(field: ProjectCustomField) {
+  if (field.type === 'date') return 'date'
+  if (field.type === 'email') return 'email'
+  if (field.type === 'number') return 'number'
+  return 'text'
 }
 
 function Row({ label, value }: { label: string; value: string }) {

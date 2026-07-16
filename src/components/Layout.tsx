@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Logo } from './Logo'
 import { useAuth } from '../lib/auth'
@@ -10,13 +10,17 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-cti-line bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link to="/">
             <Logo />
           </Link>
           {session && (
-            <div className="flex items-center gap-4 text-sm">
-              <span className="hidden text-cti-gray sm:inline">{session.user.email}</span>
+            <div className="flex flex-wrap items-center justify-end gap-3 text-sm">
+              <nav className="flex items-center gap-1 rounded-md border border-cti-line bg-cti-bg p-1">
+                <NavItem to="/">Projects</NavItem>
+                <NavItem to="/settings">Settings</NavItem>
+              </nav>
+              <span className="hidden text-cti-gray lg:inline">{session.user.email}</span>
               <button
                 className="btn-ghost"
                 onClick={async () => {
@@ -32,6 +36,23 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
       <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
     </div>
+  )
+}
+
+function NavItem({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <NavLink
+      to={to}
+      end={to === '/'}
+      className={({ isActive }) =>
+        [
+          'rounded px-3 py-1.5 text-sm font-semibold transition-colors',
+          isActive ? 'bg-white text-cti-black shadow-sm' : 'text-cti-gray hover:text-cti-ink',
+        ].join(' ')
+      }
+    >
+      {children}
+    </NavLink>
   )
 }
 

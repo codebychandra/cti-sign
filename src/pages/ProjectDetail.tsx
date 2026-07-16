@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import { getAppSettings } from '../lib/settings'
 import type { Form, Project, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
@@ -21,7 +22,7 @@ export function ProjectDetail() {
   const [recFormId, setRecFormId] = useState('')
   const [signerName, setSignerName] = useState('')
   const [signerEmail, setSignerEmail] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(() => getAppSettings().defaultSignatureMessage)
 
   const load = async () => {
     setLoading(true)
@@ -75,7 +76,7 @@ export function ProjectDetail() {
     void form
     setSignerName('')
     setSignerEmail('')
-    setMessage('')
+    setMessage(getAppSettings().defaultSignatureMessage)
     setRecFormId('')
     load()
   }

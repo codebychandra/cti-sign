@@ -19,7 +19,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type field_type as enum ('signature', 'initials', 'text', 'date', 'signed_date', 'number', 'email');
+  create type field_type as enum ('signature', 'initials', 'text', 'textarea', 'date', 'signed_date', 'number', 'email');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter type field_type add value if not exists 'textarea';
 exception when duplicate_object then null; end $$;
 
 do $$ begin

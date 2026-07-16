@@ -1,5 +1,6 @@
 export type RecordStatus = 'draft' | 'sent' | 'viewed' | 'completed' | 'declined'
 export type FieldType = 'signature' | 'initials' | 'text' | 'date' | 'name' | 'email'
+export type CustomFieldType = 'text' | 'date' | 'number' | 'email'
 
 export interface Project {
   id: string
@@ -32,6 +33,16 @@ export interface FormField {
   sort_order: number
 }
 
+export interface ProjectCustomField {
+  id: string
+  project_id: string
+  label: string
+  type: CustomFieldType
+  required: boolean
+  sort_order: number
+  created_at: string
+}
+
 export interface SignRecord {
   id: string
   form_id: string
@@ -52,6 +63,13 @@ export interface SignRecord {
 }
 
 export interface RecordValue {
+  id: string
+  record_id: string
+  field_id: string
+  value: string | null
+}
+
+export interface RecordCustomValue {
   id: string
   record_id: string
   field_id: string

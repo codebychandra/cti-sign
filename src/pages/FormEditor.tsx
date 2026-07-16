@@ -25,6 +25,7 @@ export function FormEditor() {
   const [fields, setFields] = useState<LocalField[]>([])
   const [tool, setTool] = useState<FieldType>('signature')
   const [selected, setSelected] = useState<string | null>(null)
+  const [preview, setPreview] = useState(false)
   const [status, setStatus] = useState<string>('')
   const [busy, setBusy] = useState(false)
 
@@ -153,27 +154,44 @@ export function FormEditor() {
           {/* Toolbar */}
           <aside className="lg:sticky lg:top-20 lg:self-start">
             <div className="card p-4">
-              <p className="label">Field to place</p>
-              <div className="grid grid-cols-2 gap-2">
-                {FIELD_TYPES.map((t) => (
-                  <button
-                    key={t.type}
-                    onClick={() => setTool(t.type)}
-                    className={`btn text-xs ${tool === t.type ? 'bg-cti-red text-white' : 'border border-cti-line bg-white text-cti-ink hover:bg-cti-bg'}`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-3 text-xs text-cti-gray">
-                Click on the page to drop a <b>{tool}</b> field. Drag to move, use the corner to resize.
+              <p className="label">Mode</p>
+              <button
+                type="button"
+                onClick={() => setPreview((value) => !value)}
+                className={preview ? 'btn-primary w-full' : 'btn-ghost w-full'}
+              >
+                {preview ? 'Preview on' : 'Preview result'}
+              </button>
+              <p className="mt-2 text-xs text-cti-gray">
+                {preview
+                  ? 'Showing dummy values so you can check alignment. Turn preview off to edit boxes.'
+                  : 'Preview fills mapped fields with sample values without saving them.'}
               </p>
+
+              <div className="mt-4 border-t border-cti-line pt-4">
+                <p className="label">Field to place</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {FIELD_TYPES.map((t) => (
+                    <button
+                      key={t.type}
+                      onClick={() => setTool(t.type)}
+                      disabled={preview}
+                      className={`btn text-xs ${tool === t.type ? 'bg-cti-red text-white' : 'border border-cti-line bg-white text-cti-ink hover:bg-cti-bg'}`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-cti-gray">
+                  Click on the page to drop a <b>{tool}</b> field. Drag to move, use the corner to resize.
+                </p>
+              </div>
               <label className="btn-ghost mt-4 w-full cursor-pointer text-xs">
                 Replace template
                 <input type="file" accept="application/pdf" className="hidden" onChange={onUpload} />
               </label>
 
-              {selected && (
+              {selected && !preview && (
                 <FieldInspector
                   field={fields.find((f) => f.id === selected)!}
                   onChange={(p) => updateField(selected, p)}
@@ -193,6 +211,7 @@ export function FormEditor() {
                 pageIndex={i}
                 fields={fields.filter((f) => f.page === i)}
                 selected={selected}
+                preview={preview}
                 onAdd={(nx, ny) => addField(i, nx, ny)}
                 onSelect={setSelected}
                 onMove={(id, nx, ny) => updateField(id, { x: nx, y: ny })}
@@ -240,6 +259,7 @@ function PageCanvas({
   pageIndex,
   fields,
   selected,
+  preview,
   onAdd,
   onSelect,
   onMove,
@@ -249,6 +269,7 @@ function PageCanvas({
   pageIndex: number
   fields: LocalField[]
   selected: string | null
+  preview: boolean
   onAdd: (nx: number, ny: number) => void
   onSelect: (id: string) => void
   onMove: (id: string, nx: number, ny: number) => void
@@ -266,6 +287,7 @@ function PageCanvas({
   }, [pdfBytes, pageIndex])
 
   const handleClick = (e: React.MouseEvent) => {
+    if (preview) return
     if (drag.current) return
     if ((e.target as HTMLElement).dataset.field) return
     const rect = wrapRef.current!.getBoundingClientRect()
@@ -273,6 +295,7 @@ function PageCanvas({
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (preview) return
     if (!drag.current) return
     const rect = wrapRef.current!.getBoundingClientRect()
     const dx = (e.clientX - drag.current.sx) / rect.width
@@ -292,7 +315,7 @@ function PageCanvas({
     <div className="card inline-block overflow-hidden p-0">
       <div
         ref={wrapRef}
-        className="relative cursor-crosshair"
+        className={`relative ${preview ? 'cursor-default' : 'cursor-crosshair'}`}
         style={{ width: size.w, height: size.h }}
         onClick={handleClick}
         onPointerMove={onPointerMove}
@@ -305,39 +328,60 @@ function PageCanvas({
             key={f.id}
             data-field="1"
             onPointerDown={(e) => {
+              if (preview) return
               e.stopPropagation()
               onSelect(f.id)
               drag.current = { id: f.id, mode: 'move', sx: e.clientX, sy: e.clientY, ox: f.x, oy: f.y }
               ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             }}
-            className={`absolute flex items-center justify-center rounded text-[10px] font-semibold uppercase tracking-wide ${
-              selected === f.id ? 'ring-2 ring-cti-red' : ''
-            }`}
+            className={`absolute flex items-center rounded text-[10px] font-semibold ${
+              selected === f.id && !preview ? 'ring-2 ring-cti-red' : ''
+            } ${preview ? 'justify-start overflow-hidden px-1 normal-case tracking-normal' : 'justify-center uppercase tracking-wide'}`}
             style={{
               left: `${f.x * 100}%`,
               top: `${f.y * 100}%`,
               width: `${f.width * 100}%`,
               height: `${f.height * 100}%`,
-              background: 'rgba(225,27,34,0.12)',
-              border: '1px dashed #E11B22',
-              color: '#B3151B',
+              background: preview ? 'rgba(255,255,255,0.08)' : 'rgba(225,27,34,0.12)',
+              border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22',
+              color: preview ? '#111111' : '#B3151B',
+              fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif',
+              fontSize: preview && (f.type === 'signature' || f.type === 'initials') ? '18px' : preview ? '11px' : undefined,
+              lineHeight: preview ? '1.1' : undefined,
             }}
           >
-            {f.type}
-            <span
-              data-field="1"
-              onPointerDown={(e) => {
-                e.stopPropagation()
-                drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }
-                ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-              }}
-              className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red"
-            />
+            {preview ? sampleValue(f) : f.type}
+            {!preview && (
+              <span
+                data-field="1"
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }
+                  ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+                }}
+                className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red"
+              />
+            )}
           </div>
         ))}
       </div>
     </div>
   )
+}
+
+function sampleValue(field: FormField) {
+  const label = field.label.toLowerCase()
+  if (field.type === 'signature') return 'Agus Chandra'
+  if (field.type === 'initials') return 'AC'
+  if (field.type === 'name') return 'Agus Chandra'
+  if (field.type === 'date') return '2026-07-16'
+  if (field.type === 'email') return 'cti-it-team@cti-usa.com'
+  if (label.includes('passport')) return 'A1234567'
+  if (label.includes('seafarer') || label === 'id') return 'SF-10294'
+  if (label.includes('position') || label.includes('posisi')) return 'Chief Engineer'
+  if (label.includes('lamp')) return '-'
+  if (label.includes('no')) return '001/CTI/ESIGN/VII/2026'
+  return field.label && field.label !== 'Text' ? field.label : 'Sample text'
 }
 
 function clamp(v: number, min: number, max: number) {

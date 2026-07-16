@@ -1,5 +1,5 @@
 // POST /send-signature-request — staff only (JWT verified). Emails the signer
-// their unique signing link via Resend and marks the record as sent.
+// their unique signing link and marks the record as sent.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, json } from '../_shared/cors.ts'
 
@@ -10,6 +10,10 @@ const admin = createClient(
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const FROM = Deno.env.get('SIGN_FROM_EMAIL') ?? 'CTI Sign <no-reply@cti-usa.com>'
+const MS_TENANT_ID = Deno.env.get('MS_TENANT_ID')
+const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID')
+const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET')
+const MS_SEND_FROM = Deno.env.get('MS_SEND_FROM')
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -26,31 +30,28 @@ Deno.serve(async (req) => {
     if (!record) return json({ error: 'Record not found' }, 404)
 
     const { data: form } = await admin.from('forms').select('name').eq('id', record.form_id).single()
+    const docName = form?.name ?? 'Document'
     const link = `${appUrl}/sign/${record.token}`
+    const subject = `Signature requested: ${docName}`
+    const html = emailHtml(record.signer_name, docName, record.message, link)
 
-    if (!RESEND_API_KEY) {
-      // No email provider configured yet — still mark sent so the manual link works.
+    if (isMicrosoftGraphConfigured()) {
+      const result = await sendWithMicrosoftGraph(record.signer_email, subject, html)
+      if (!result.ok) return json({ error: 'Microsoft email error: ' + result.error }, 502)
       await markSent(record.id)
-      return json({ ok: true, emailed: false, note: 'RESEND_API_KEY not set; link marked sent for manual sharing.', link })
+      return json({ ok: true, emailed: true, provider: 'microsoft-graph' })
     }
 
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: FROM,
-        to: record.signer_email,
-        subject: `Signature requested: ${form?.name ?? 'Document'}`,
-        html: emailHtml(record.signer_name, form?.name ?? 'a document', record.message, link),
-      }),
-    })
-    if (!res.ok) {
-      const err = await res.text()
-      return json({ error: 'Email provider error: ' + err }, 502)
+    if (RESEND_API_KEY) {
+      const result = await sendWithResend(record.signer_email, subject, html)
+      if (!result.ok) return json({ error: 'Email provider error: ' + result.error }, 502)
+      await markSent(record.id)
+      return json({ ok: true, emailed: true, provider: 'resend' })
     }
 
+    // No email provider configured yet — still mark sent so the manual link works.
     await markSent(record.id)
-    return json({ ok: true, emailed: true })
+    return json({ ok: true, emailed: false, note: 'No email provider configured; link marked sent for manual sharing.', link })
   } catch (e) {
     return json({ error: (e as Error).message }, 500)
   }
@@ -60,11 +61,70 @@ function markSent(id: string) {
   return admin.from('records').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', id)
 }
 
+function isMicrosoftGraphConfigured() {
+  return Boolean(MS_TENANT_ID && MS_CLIENT_ID && MS_CLIENT_SECRET && MS_SEND_FROM)
+}
+
+async function sendWithMicrosoftGraph(to: string, subject: string, html: string) {
+  const token = await getMicrosoftAccessToken()
+  if (!token.ok) return token
+
+  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(MS_SEND_FROM!)}/sendMail`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: {
+        subject,
+        body: { contentType: 'HTML', content: html },
+        toRecipients: [{ emailAddress: { address: to } }],
+      },
+      saveToSentItems: true,
+    }),
+  })
+
+  if (!res.ok) return { ok: false as const, error: await res.text() }
+  return { ok: true as const }
+}
+
+async function getMicrosoftAccessToken() {
+  const body = new URLSearchParams({
+    client_id: MS_CLIENT_ID!,
+    client_secret: MS_CLIENT_SECRET!,
+    scope: 'https://graph.microsoft.com/.default',
+    grant_type: 'client_credentials',
+  })
+
+  const res = await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+
+  if (!res.ok) return { ok: false as const, error: await res.text() }
+  const data = await res.json() as { access_token?: string }
+  if (!data.access_token) return { ok: false as const, error: 'No access token returned.' }
+  return { ok: true as const, accessToken: data.access_token }
+}
+
+async function sendWithResend(to: string, subject: string, html: string) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to, subject, html }),
+  })
+
+  if (!res.ok) return { ok: false as const, error: await res.text() }
+  return { ok: true as const }
+}
+
 function emailHtml(name: string, doc: string, message: string, link: string) {
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">
     <div style="background:#111;padding:20px 24px;border-radius:10px 10px 0 0">
-      <span style="color:#fff;font-size:20px;font-weight:800">CTI <span style="color:#E11B22">Sign</span></span>
+      <span style="color:#fff;font-size:20px;font-weight:800">CTI <span style="color:#E11B22">eSign</span></span>
     </div>
     <div style="border:1px solid #e5e7eb;border-top:0;padding:24px;border-radius:0 0 10px 10px">
       <p>Hi ${escapeHtml(name)},</p>

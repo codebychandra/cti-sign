@@ -1,7 +1,7 @@
 export type RecordStatus = 'draft' | 'sent' | 'viewed' | 'submitted' | 'completed' | 'declined'
-export type FieldType = 'signature' | 'initials' | 'text' | 'date' | 'name' | 'email'
+export type FieldType = 'signature' | 'initials' | 'text' | 'date' | 'signed_date' | 'number' | 'email'
 export type TextAlign = 'left' | 'center' | 'right'
-export type CustomFieldType = 'text' | 'date' | 'number' | 'email'
+export type CustomFieldType = 'text' | 'date' | 'number' | 'email' | 'auto_number'
 export type ProjectType = 'sent_signature' | 'auto_populate'
 
 export interface Project {
@@ -46,6 +46,8 @@ export interface ProjectCustomField {
   type: CustomFieldType
   required: boolean
   show_in_table: boolean
+  auto_prefix: string | null
+  auto_start: number | null
   sort_order: number
   created_at: string
 }

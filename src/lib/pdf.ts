@@ -6,12 +6,7 @@ import type { FormField, RecordValue } from './types'
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
 /** Render one page of a PDF to a canvas at the given render width (px). */
-export async function renderPage(
-  data: ArrayBuffer,
-  pageIndex: number,
-  canvas: HTMLCanvasElement,
-  renderWidth: number,
-) {
+export async function renderPage(data: ArrayBuffer, pageIndex: number, canvas: HTMLCanvasElement, renderWidth: number) {
   const doc = await pdfjs.getDocument({ data: data.slice(0) }).promise
   const page = await doc.getPage(pageIndex + 1)
   const unscaled = page.getViewport({ scale: 1 })
@@ -30,16 +25,8 @@ export async function getPageCount(data: ArrayBuffer): Promise<number> {
   return doc.numPages
 }
 
-/**
- * Burn field values into the template PDF and return the signed bytes.
- * Field geometry is normalized (0..1) with y measured from the TOP of the page
- * (screen coordinates); pdf-lib's origin is bottom-left, so we flip y.
- */
-export async function buildSignedPdf(
-  templateBytes: ArrayBuffer,
-  fields: FormField[],
-  values: RecordValue[],
-): Promise<Uint8Array> {
+/** Burn field values into the template PDF and return the signed bytes. */
+export async function buildSignedPdf(templateBytes: ArrayBuffer, fields: FormField[], values: RecordValue[]): Promise<Uint8Array> {
   const pdf = await PDFDocument.load(templateBytes)
   const font = await pdf.embedFont(StandardFonts.Helvetica)
   const pages = pdf.getPages()
@@ -51,11 +38,9 @@ export async function buildSignedPdf(
     const page = pages[f.page]
     if (!page) continue
     const { width: pw, height: ph } = page.getSize()
-
     const boxX = f.x * pw
     const boxW = f.width * pw
     const boxH = f.height * ph
-    // convert top-based y to bottom-based
     const boxY = ph - f.y * ph - boxH
 
     if (f.type === 'signature' || f.type === 'initials') {
@@ -64,27 +49,25 @@ export async function buildSignedPdf(
       const bytes = dataUrlToBytes(value)
       const img = isPng ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes)
       const scaled = img.scaleToFit(boxW, boxH)
-      page.drawImage(img, {
-        x: boxX + (boxW - scaled.width) / 2,
-        y: boxY + (boxH - scaled.height) / 2,
-        width: scaled.width,
-        height: scaled.height,
-      })
+      page.drawImage(img, { x: boxX + (boxW - scaled.width) / 2, y: boxY + (boxH - scaled.height) / 2, width: scaled.width, height: scaled.height })
     } else {
       const padding = 2
       const fontSize = clamp(f.font_size ?? 11, 6, Math.max(6, boxH * 0.9))
-      const textWidth = font.widthOfTextAtSize(value, fontSize)
       const align = f.text_align ?? 'left'
-      let textX = boxX + padding
-      if (align === 'center') textX = boxX + Math.max(padding, (boxW - textWidth) / 2)
-      if (align === 'right') textX = boxX + Math.max(padding, boxW - textWidth - padding)
+      const lines = f.type === 'textarea' ? value.split(/\r?\n/) : [value]
+      const lineHeight = fontSize * 1.2
+      const maxLines = Math.max(1, Math.floor((boxH - padding * 2) / lineHeight))
+      const visibleLines = lines.slice(0, maxLines)
+      const totalTextHeight = visibleLines.length * lineHeight
+      const firstLineY = f.type === 'textarea' ? boxY + boxH - padding - fontSize : boxY + (boxH - fontSize) / 2
 
-      page.drawText(value, {
-        x: textX,
-        y: boxY + (boxH - fontSize) / 2,
-        size: fontSize,
-        font,
-        color: rgb(0.06, 0.06, 0.06),
+      visibleLines.forEach((line, index) => {
+        const textWidth = font.widthOfTextAtSize(line, fontSize)
+        let textX = boxX + padding
+        if (align === 'center') textX = boxX + Math.max(padding, (boxW - textWidth) / 2)
+        if (align === 'right') textX = boxX + Math.max(padding, boxW - textWidth - padding)
+        const textY = f.type === 'textarea' ? firstLineY - index * lineHeight : boxY + Math.max(padding, (boxH - totalTextHeight) / 2)
+        page.drawText(line, { x: textX, y: textY, size: fontSize, font, color: rgb(0.06, 0.06, 0.06) })
       })
     }
   }
@@ -100,6 +83,4 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
   return bytes
 }
 
-function clamp(v: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, v))
-}
+function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)) }

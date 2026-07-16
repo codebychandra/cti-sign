@@ -19,7 +19,11 @@ create extension if not exists "pgcrypto";
 
 -- Enums ---------------------------------------------------------------------
 do $$ begin
-  create type record_status as enum ('draft', 'sent', 'viewed', 'completed', 'declined');
+  create type record_status as enum ('draft', 'sent', 'viewed', 'submitted', 'completed', 'declined');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter type record_status add value if not exists 'submitted';
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -30,13 +34,18 @@ do $$ begin
   create type custom_field_type as enum ('text', 'date', 'number', 'email');
 exception when duplicate_object then null; end $$;
 
+do $$ begin
+  create type project_type as enum ('sent_signature', 'auto_populate');
+exception when duplicate_object then null; end $$;
+
 -- Tables --------------------------------------------------------------------
 create table if not exists projects (
-  id          uuid primary key default gen_random_uuid(),
-  name        text not null,
-  description text default '',
-  owner_id    uuid not null references auth.users(id) on delete cascade,
-  created_at  timestamptz not null default now()
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null,
+  description  text default '',
+  project_type project_type not null default 'sent_signature',
+  owner_id     uuid not null references auth.users(id) on delete cascade,
+  created_at   timestamptz not null default now()
 );
 
 create table if not exists forms (
@@ -50,20 +59,21 @@ create table if not exists forms (
 );
 
 create table if not exists form_fields (
-  id           uuid primary key default gen_random_uuid(),
-  form_id      uuid not null references forms(id) on delete cascade,
-  type         field_type not null default 'signature',
-  label        text default '',
-  page         int not null default 0,          -- 0-indexed
+  id              uuid primary key default gen_random_uuid(),
+  form_id         uuid not null references forms(id) on delete cascade,
+  type            field_type not null default 'signature',
+  label           text default '',
+  custom_field_id uuid references project_custom_fields(id) on delete set null,
+  page            int not null default 0,          -- 0-indexed
   -- normalized geometry (0..1) relative to the page, so it scales at any zoom
-  x            double precision not null,
-  y            double precision not null,
-  width        double precision not null,
-  height       double precision not null,
-  text_align   text not null default 'left',   -- left, center, right
-  font_size    int not null default 11,
-  required     boolean not null default true,
-  sort_order   int not null default 0
+  x               double precision not null,
+  y               double precision not null,
+  width           double precision not null,
+  height          double precision not null,
+  text_align      text not null default 'left',   -- left, center, right
+  font_size       int not null default 11,
+  required        boolean not null default true,
+  sort_order      int not null default 0
 );
 
 create table if not exists project_custom_fields (
@@ -89,6 +99,7 @@ create table if not exists records (
   message         text default '',               -- optional note shown to signer
   sent_at         timestamptz,
   viewed_at       timestamptz,
+  submitted_at    timestamptz,
   completed_at    timestamptz,
   created_by      uuid references auth.users(id) on delete set null,
   created_at      timestamptz not null default now()
@@ -114,6 +125,7 @@ create table if not exists record_custom_values (
 
 create index if not exists idx_forms_project on forms(project_id);
 create index if not exists idx_fields_form on form_fields(form_id);
+create index if not exists idx_fields_custom_field on form_fields(custom_field_id);
 create index if not exists idx_project_custom_fields_project on project_custom_fields(project_id);
 create index if not exists idx_records_form on records(form_id);
 create index if not exists idx_records_project on records(project_id);

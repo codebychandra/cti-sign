@@ -32,7 +32,7 @@ export function RecordDetail() {
       ])
       if (valuesError) setMsg('Run the updated Supabase schema to enable record custom values.')
       setForm(f as Form)
-      setCustomFields((fields as ProjectCustomField[]) ?? [])
+      setCustomFields(((fields as ProjectCustomField[]) ?? []).map((field) => ({ ...field, options: normalizeOptions(field.options) })))
       setCustomValues(
         ((values as RecordCustomValue[]) ?? []).reduce<Record<string, string>>((acc, value) => {
           acc[value.field_id] = value.value ?? ''
@@ -161,7 +161,7 @@ export function RecordDetail() {
               {customFields.map((field) => (
                 <div key={field.id}>
                   <label className="label">{field.label}{field.required ? ' *' : ''}</label>
-                  <input className="input" type={inputTypeForField(field)} required={field.required} disabled={isCompleted || field.type === 'auto_number'} value={customValues[field.id] ?? ''} onChange={(e) => setCustomValues((values) => ({ ...values, [field.id]: e.target.value }))} />
+                  <RecordCustomInput field={field} disabled={isCompleted || field.type === 'auto_number'} value={customValues[field.id] ?? ''} onChange={(value) => setCustomValues((values) => ({ ...values, [field.id]: value }))} />
                 </div>
               ))}
             </div>
@@ -173,11 +173,46 @@ export function RecordDetail() {
   )
 }
 
+function RecordCustomInput({ field, disabled, value, onChange }: { field: ProjectCustomField; disabled: boolean; value: string; onChange: (value: string) => void }) {
+  const options = normalizeOptions(field.options)
+  if (field.type === 'single_dropdown') return <select className="input" required={field.required} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>
+  if (field.type === 'multi_dropdown') {
+    const selected = parseMultiValue(value)
+    return <div className="rounded-md border border-cti-line bg-white p-3"><div className="grid gap-2 sm:grid-cols-2">{options.length === 0 && <p className="text-sm text-cti-gray">No options added.</p>}{options.map((option) => <label key={option} className="flex items-center gap-2 text-sm font-semibold text-cti-ink"><input type="checkbox" disabled={disabled} checked={selected.includes(option)} onChange={(e) => onChange(toggleMultiValue(value, option, e.target.checked))} />{option}</label>)}</div>{field.required && !disabled && !selected.length && <input className="sr-only" required value="" onChange={() => {}} />}</div>
+  }
+  return <input className="input" type={inputTypeForField(field)} required={field.required} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} />
+}
+
 function inputTypeForField(field: ProjectCustomField) {
   if (field.type === 'date') return 'date'
   if (field.type === 'email') return 'email'
   if (field.type === 'number') return 'number'
   return 'text'
+}
+
+function normalizeOptions(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).map((option) => option.trim()).filter(Boolean)
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return normalizeOptions(parsed)
+    } catch {
+      return value.split(/\r?\n|,/).map((option) => option.trim()).filter(Boolean)
+    }
+    return value.split(/\r?\n|,/).map((option) => option.trim()).filter(Boolean)
+  }
+  return []
+}
+
+function parseMultiValue(value: string | undefined) {
+  return (value ?? '').split(',').map((item) => item.trim()).filter(Boolean)
+}
+
+function toggleMultiValue(current: string | undefined, option: string, checked: boolean) {
+  const values = new Set(parseMultiValue(current))
+  if (checked) values.add(option)
+  else values.delete(option)
+  return Array.from(values).join(', ')
 }
 
 function Row({ label, value }: { label: string; value: string }) {

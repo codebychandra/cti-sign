@@ -19,11 +19,23 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type field_type as enum ('signature', 'initials', 'text', 'date', 'name', 'email');
+  create type field_type as enum ('signature', 'initials', 'text', 'date', 'signed_date', 'number', 'email');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type custom_field_type as enum ('text', 'date', 'number', 'email');
+  alter type field_type add value if not exists 'signed_date';
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter type field_type add value if not exists 'number';
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type custom_field_type as enum ('text', 'date', 'number', 'email', 'auto_number');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter type custom_field_type add value if not exists 'auto_number';
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -55,6 +67,8 @@ create table if not exists project_custom_fields (
   type custom_field_type not null default 'text',
   required boolean not null default false,
   show_in_table boolean not null default true,
+  auto_prefix text,
+  auto_start integer not null default 1,
   sort_order int not null default 0,
   created_at timestamptz not null default now()
 );

@@ -25,7 +25,6 @@ export function Layout({ children }: { children: ReactNode }) {
           <>
             <nav className="flex-1 space-y-1 px-4 py-5">
               <SidebarItem to="/" icon={<ProjectsIcon />}>Projects</SidebarItem>
-              <SidebarItem to="/settings" icon={<SettingsIcon />}>Settings</SidebarItem>
             </nav>
             <div className="border-t border-cti-line p-4">
               <ProfileMenu email={session.user.email ?? 'Signed in'} onSignOut={handleSignOut} />
@@ -45,7 +44,6 @@ export function Layout({ children }: { children: ReactNode }) {
           {session && (
             <nav className="flex gap-2 overflow-x-auto border-t border-cti-line px-4 py-2">
               <MobileItem to="/" icon={<ProjectsIcon />}>Projects</MobileItem>
-              <MobileItem to="/settings" icon={<SettingsIcon />}>Settings</MobileItem>
             </nav>
           )}
         </header>
@@ -129,11 +127,7 @@ function ProfileMenu({ email, onSignOut, compact = false }: { email: string; onS
             <p className="text-xs font-semibold uppercase text-cti-gray">Signed in as</p>
             <p className="truncate text-sm font-semibold text-cti-ink">{email}</p>
           </div>
-          <Link className="mt-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-cti-ink hover:bg-cti-bg" to="/">
-            <ProjectsIcon />
-            Projects
-          </Link>
-          <Link className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-cti-ink hover:bg-cti-bg" to="/settings">
+          <Link className="mt-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-cti-ink hover:bg-cti-bg" to="/settings">
             <SettingsIcon />
             Settings
           </Link>

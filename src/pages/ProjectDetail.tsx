@@ -37,6 +37,7 @@ export function ProjectDetail() {
   const [newFieldShow, setNewFieldShow] = useState(true)
   const [newFieldPrefix, setNewFieldPrefix] = useState('')
   const [newFieldStart, setNewFieldStart] = useState(1)
+  const [newFieldOptions, setNewFieldOptions] = useState('')
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null)
   const [editFieldLabel, setEditFieldLabel] = useState('')
   const [editFieldType, setEditFieldType] = useState<CustomFieldType>('text')
@@ -44,6 +45,7 @@ export function ProjectDetail() {
   const [editFieldShow, setEditFieldShow] = useState(true)
   const [editFieldPrefix, setEditFieldPrefix] = useState('')
   const [editFieldStart, setEditFieldStart] = useState(1)
+  const [editFieldOptions, setEditFieldOptions] = useState('')
 
   const [signerName, setSignerName] = useState('')
   const [signerEmail, setSignerEmail] = useState('')
@@ -70,7 +72,7 @@ export function ProjectDetail() {
     setProject({ ...(proj as Project), project_type: (proj as Project)?.project_type ?? 'sent_signature' })
     setForms((fms as Form[]) ?? [])
     setRecords(loadedRecords)
-    setCustomFields(((fields as ProjectCustomField[]) ?? []).map((field) => ({ ...field, show_in_table: field.show_in_table ?? true, auto_prefix: field.auto_prefix ?? '', auto_start: field.auto_start ?? 1 })))
+    setCustomFields(((fields as ProjectCustomField[]) ?? []).map((field) => ({ ...field, show_in_table: field.show_in_table ?? true, auto_prefix: field.auto_prefix ?? '', auto_start: field.auto_start ?? 1, options: normalizeOptions(field.options) })))
     if (loadedRecords.length) {
       const { data: values } = await supabase.from('record_custom_values').select('*').in('record_id', loadedRecords.map((record) => record.id))
       setRecordValues(groupRecordValues((values as RecordCustomValue[]) ?? []))
@@ -116,7 +118,17 @@ export function ProjectDetail() {
   const createCustomField = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newFieldLabel.trim()) return
-    const { error } = await supabase.from('project_custom_fields').insert({ project_id: projectId, label: newFieldLabel.trim(), type: newFieldType, required: newFieldRequired, show_in_table: newFieldShow, auto_prefix: newFieldType === 'auto_number' ? newFieldPrefix.trim() : null, auto_start: newFieldType === 'auto_number' ? Number(newFieldStart) || 1 : 1, sort_order: customFields.length })
+    const { error } = await supabase.from('project_custom_fields').insert({
+      project_id: projectId,
+      label: newFieldLabel.trim(),
+      type: newFieldType,
+      required: newFieldRequired,
+      show_in_table: newFieldShow,
+      auto_prefix: newFieldType === 'auto_number' ? newFieldPrefix.trim() : null,
+      auto_start: newFieldType === 'auto_number' ? Number(newFieldStart) || 1 : 1,
+      options: isDropdownType(newFieldType) ? optionTextToList(newFieldOptions) : [],
+      sort_order: customFields.length,
+    })
     if (error) return setError(error.message)
     setNewFieldLabel('')
     setNewFieldType('text')
@@ -124,6 +136,7 @@ export function ProjectDetail() {
     setNewFieldShow(true)
     setNewFieldPrefix('')
     setNewFieldStart(1)
+    setNewFieldOptions('')
     load()
   }
 
@@ -135,11 +148,20 @@ export function ProjectDetail() {
     setEditFieldShow(field.show_in_table)
     setEditFieldPrefix(field.auto_prefix ?? '')
     setEditFieldStart(field.auto_start ?? 1)
+    setEditFieldOptions(normalizeOptions(field.options).join('\n'))
   }
 
   const saveFieldEdit = async (fieldId: string) => {
     if (!editFieldLabel.trim()) return
-    const { error } = await supabase.from('project_custom_fields').update({ label: editFieldLabel.trim(), type: editFieldType, required: editFieldRequired, show_in_table: editFieldShow, auto_prefix: editFieldType === 'auto_number' ? editFieldPrefix.trim() : null, auto_start: editFieldType === 'auto_number' ? Number(editFieldStart) || 1 : 1 }).eq('id', fieldId)
+    const { error } = await supabase.from('project_custom_fields').update({
+      label: editFieldLabel.trim(),
+      type: editFieldType,
+      required: editFieldRequired,
+      show_in_table: editFieldShow,
+      auto_prefix: editFieldType === 'auto_number' ? editFieldPrefix.trim() : null,
+      auto_start: editFieldType === 'auto_number' ? Number(editFieldStart) || 1 : 1,
+      options: isDropdownType(editFieldType) ? optionTextToList(editFieldOptions) : [],
+    }).eq('id', fieldId)
     if (error) return setError(error.message)
     setEditingFieldId(null)
     load()
@@ -243,7 +265,7 @@ export function ProjectDetail() {
       {activeTab === 'template' && <TemplateTab template={template} customFields={customFields} ensureTemplate={ensureTemplate} renameTemplate={renameTemplate} deleteTemplate={deleteTemplate} />}
       {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} recordValues={recordValues} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} openPanel={setPanel} />}
       {activeTab === 'completed' && <CompletedTab isAutoPopulate={isAutoPopulate} records={completedRecords} visibleFields={visibleFields} recordValues={recordValues} />}
-      {activeTab === 'setting' && <SettingTab customFields={customFields} newFieldLabel={newFieldLabel} setNewFieldLabel={setNewFieldLabel} newFieldType={newFieldType} setNewFieldType={setNewFieldType} newFieldRequired={newFieldRequired} setNewFieldRequired={setNewFieldRequired} newFieldShow={newFieldShow} setNewFieldShow={setNewFieldShow} newFieldPrefix={newFieldPrefix} setNewFieldPrefix={setNewFieldPrefix} newFieldStart={newFieldStart} setNewFieldStart={setNewFieldStart} editingFieldId={editingFieldId} editFieldLabel={editFieldLabel} setEditFieldLabel={setEditFieldLabel} editFieldType={editFieldType} setEditFieldType={setEditFieldType} editFieldRequired={editFieldRequired} setEditFieldRequired={setEditFieldRequired} editFieldShow={editFieldShow} setEditFieldShow={setEditFieldShow} editFieldPrefix={editFieldPrefix} setEditFieldPrefix={setEditFieldPrefix} editFieldStart={editFieldStart} setEditFieldStart={setEditFieldStart} createCustomField={createCustomField} beginEditField={beginEditField} saveFieldEdit={saveFieldEdit} cancelFieldEdit={() => setEditingFieldId(null)} deleteCustomField={deleteCustomField} toggleFieldVisible={toggleFieldVisible} moveCustomField={moveCustomField} />}
+      {activeTab === 'setting' && <SettingTab customFields={customFields} newFieldLabel={newFieldLabel} setNewFieldLabel={setNewFieldLabel} newFieldType={newFieldType} setNewFieldType={setNewFieldType} newFieldRequired={newFieldRequired} setNewFieldRequired={setNewFieldRequired} newFieldShow={newFieldShow} setNewFieldShow={setNewFieldShow} newFieldPrefix={newFieldPrefix} setNewFieldPrefix={setNewFieldPrefix} newFieldStart={newFieldStart} setNewFieldStart={setNewFieldStart} newFieldOptions={newFieldOptions} setNewFieldOptions={setNewFieldOptions} editingFieldId={editingFieldId} editFieldLabel={editFieldLabel} setEditFieldLabel={setEditFieldLabel} editFieldType={editFieldType} setEditFieldType={setEditFieldType} editFieldRequired={editFieldRequired} setEditFieldRequired={setEditFieldRequired} editFieldShow={editFieldShow} setEditFieldShow={setEditFieldShow} editFieldPrefix={editFieldPrefix} setEditFieldPrefix={setEditFieldPrefix} editFieldStart={editFieldStart} setEditFieldStart={setEditFieldStart} editFieldOptions={editFieldOptions} setEditFieldOptions={setEditFieldOptions} createCustomField={createCustomField} beginEditField={beginEditField} saveFieldEdit={saveFieldEdit} cancelFieldEdit={() => setEditingFieldId(null)} deleteCustomField={deleteCustomField} toggleFieldVisible={toggleFieldVisible} moveCustomField={moveCustomField} />}
       {panel === 'add' && <RecordPanel title="Add record" onClose={() => setPanel(null)}><RecordForm isAutoPopulate={isAutoPopulate} template={template} signerName={signerName} setSignerName={setSignerName} signerEmail={signerEmail} setSignerEmail={setSignerEmail} message={message} setMessage={setMessage} customFields={customFields} customValues={customValues} setCustomValues={setCustomValues} createRecord={createRecord} /></RecordPanel>}
       {panel === 'import' && <RecordPanel title="Import records" onClose={() => setPanel(null)}><ImportPanel importText={importText} setImportText={setImportText} importRecords={importRecords} isAutoPopulate={isAutoPopulate} /></RecordPanel>}
     </>
@@ -265,13 +287,15 @@ function CompletedTab({ isAutoPopulate, records, visibleFields, recordValues }: 
   return <section><h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Completed</h2><RecordsTable isAutoPopulate={isAutoPopulate} records={records} fields={visibleFields} recordValues={recordValues} selectedRecords={{}} setSelectedRecords={() => {}} deleteRecord={() => {}} markComplete={() => {}} completed /></section>
 }
 
-function SettingTab(props: { customFields: ProjectCustomField[]; newFieldLabel: string; setNewFieldLabel: (value: string) => void; newFieldType: CustomFieldType; setNewFieldType: (value: CustomFieldType) => void; newFieldRequired: boolean; setNewFieldRequired: (value: boolean) => void; newFieldShow: boolean; setNewFieldShow: (value: boolean) => void; newFieldPrefix: string; setNewFieldPrefix: (value: string) => void; newFieldStart: number; setNewFieldStart: (value: number) => void; editingFieldId: string | null; editFieldLabel: string; setEditFieldLabel: (value: string) => void; editFieldType: CustomFieldType; setEditFieldType: (value: CustomFieldType) => void; editFieldRequired: boolean; setEditFieldRequired: (value: boolean) => void; editFieldShow: boolean; setEditFieldShow: (value: boolean) => void; editFieldPrefix: string; setEditFieldPrefix: (value: string) => void; editFieldStart: number; setEditFieldStart: (value: number) => void; createCustomField: (e: React.FormEvent) => void; beginEditField: (field: ProjectCustomField) => void; saveFieldEdit: (fieldId: string) => void; cancelFieldEdit: () => void; deleteCustomField: (fieldId: string) => void; toggleFieldVisible: (field: ProjectCustomField) => void; moveCustomField: (fieldId: string, direction: -1 | 1) => void }) {
-  return <section className="space-y-4"><div><h2 className="font-heading text-lg font-bold text-cti-black">Record columns</h2><p className="text-sm text-cti-gray">These fields are used in Template mapping, Form records, and Completed records.</p></div><form onSubmit={props.createCustomField} className="card grid gap-4 p-5 lg:grid-cols-[1fr_180px_140px_120px_auto_auto_auto]"><div><label className="label">Field label</label><input className="input" value={props.newFieldLabel} onChange={(e) => props.setNewFieldLabel(e.target.value)} /></div><div><label className="label">Type</label><FieldTypeSelect value={props.newFieldType} onChange={props.setNewFieldType} /></div>{props.newFieldType === 'auto_number' ? <><div><label className="label">Prefix</label><input className="input" value={props.newFieldPrefix} onChange={(e) => props.setNewFieldPrefix(e.target.value)} placeholder="CTI-" /></div><div><label className="label">Start from</label><input className="input" type="number" min={1} value={props.newFieldStart} onChange={(e) => props.setNewFieldStart(Number(e.target.value) || 1)} /></div></> : <><div></div><div></div></>}<label className="mt-7 flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.newFieldRequired} onChange={(e) => props.setNewFieldRequired(e.target.checked)} disabled={props.newFieldType === 'auto_number'} />Required</label><label className="mt-7 flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.newFieldShow} onChange={(e) => props.setNewFieldShow(e.target.checked)} />Show in form table</label><button className="btn-dark mt-6">+ Add</button></form><div className="space-y-2">{props.customFields.length === 0 && <EmptyState text="No custom fields yet." />}{props.customFields.map((field, index) => <FieldRow key={field.id} field={field} index={index} total={props.customFields.length} {...props} />)}</div></section>
+type SettingTabProps = { customFields: ProjectCustomField[]; newFieldLabel: string; setNewFieldLabel: (value: string) => void; newFieldType: CustomFieldType; setNewFieldType: (value: CustomFieldType) => void; newFieldRequired: boolean; setNewFieldRequired: (value: boolean) => void; newFieldShow: boolean; setNewFieldShow: (value: boolean) => void; newFieldPrefix: string; setNewFieldPrefix: (value: string) => void; newFieldStart: number; setNewFieldStart: (value: number) => void; newFieldOptions: string; setNewFieldOptions: (value: string) => void; editingFieldId: string | null; editFieldLabel: string; setEditFieldLabel: (value: string) => void; editFieldType: CustomFieldType; setEditFieldType: (value: CustomFieldType) => void; editFieldRequired: boolean; setEditFieldRequired: (value: boolean) => void; editFieldShow: boolean; setEditFieldShow: (value: boolean) => void; editFieldPrefix: string; setEditFieldPrefix: (value: string) => void; editFieldStart: number; setEditFieldStart: (value: number) => void; editFieldOptions: string; setEditFieldOptions: (value: string) => void; createCustomField: (e: React.FormEvent) => void; beginEditField: (field: ProjectCustomField) => void; saveFieldEdit: (fieldId: string) => void; cancelFieldEdit: () => void; deleteCustomField: (fieldId: string) => void; toggleFieldVisible: (field: ProjectCustomField) => void; moveCustomField: (fieldId: string, direction: -1 | 1) => void }
+
+function SettingTab(props: SettingTabProps) {
+  return <section className="space-y-4"><div><h2 className="font-heading text-lg font-bold text-cti-black">Record columns</h2><p className="text-sm text-cti-gray">These fields are used in Template mapping, Form records, and Completed records.</p></div><form onSubmit={props.createCustomField} className="card grid gap-4 p-5 lg:grid-cols-[1fr_190px_140px_120px_auto_auto_auto]"><div><label className="label">Field label</label><input className="input" value={props.newFieldLabel} onChange={(e) => props.setNewFieldLabel(e.target.value)} /></div><div><label className="label">Type</label><FieldTypeSelect value={props.newFieldType} onChange={props.setNewFieldType} /></div>{props.newFieldType === 'auto_number' ? <><div><label className="label">Prefix</label><input className="input" value={props.newFieldPrefix} onChange={(e) => props.setNewFieldPrefix(e.target.value)} placeholder="CTI-" /></div><div><label className="label">Start from</label><input className="input" type="number" min={1} value={props.newFieldStart} onChange={(e) => props.setNewFieldStart(Number(e.target.value) || 1)} /></div></> : <><div></div><div></div></>}<label className="mt-7 flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.newFieldRequired} onChange={(e) => props.setNewFieldRequired(e.target.checked)} disabled={props.newFieldType === 'auto_number'} />Required</label><label className="mt-7 flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.newFieldShow} onChange={(e) => props.setNewFieldShow(e.target.checked)} />Show in form table</label><button className="btn-dark mt-6">+ Add</button>{isDropdownType(props.newFieldType) && <div className="lg:col-span-7"><label className="label">Options</label><textarea className="input" rows={4} value={props.newFieldOptions} onChange={(e) => props.setNewFieldOptions(e.target.value)} placeholder="One option per line or separated by comma" /></div>}</form><div className="space-y-2">{props.customFields.length === 0 && <EmptyState text="No custom fields yet." />}{props.customFields.map((field, index) => <FieldRow key={field.id} field={field} index={index} total={props.customFields.length} {...props} />)}</div></section>
 }
 
-function FieldRow(props: any) {
-  const field = props.field as ProjectCustomField
-  if (props.editingFieldId === field.id) return <div className="card grid gap-3 p-4 lg:grid-cols-[1fr_180px_140px_120px_auto_auto_auto]"><input className="input" value={props.editFieldLabel} onChange={(e) => props.setEditFieldLabel(e.target.value)} /><FieldTypeSelect value={props.editFieldType} onChange={props.setEditFieldType} />{props.editFieldType === 'auto_number' ? <><input className="input" value={props.editFieldPrefix} onChange={(e) => props.setEditFieldPrefix(e.target.value)} placeholder="Prefix" /><input className="input" type="number" min={1} value={props.editFieldStart} onChange={(e) => props.setEditFieldStart(Number(e.target.value) || 1)} /></> : <><div></div><div></div></>}<label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.editFieldRequired} onChange={(e) => props.setEditFieldRequired(e.target.checked)} disabled={props.editFieldType === 'auto_number'} />Required</label><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.editFieldShow} onChange={(e) => props.setEditFieldShow(e.target.checked)} />Show in table</label><div className="flex gap-2"><button type="button" className="btn-primary" onClick={() => props.saveFieldEdit(field.id)}>Save</button><button type="button" className="btn-ghost" onClick={props.cancelFieldEdit}>Cancel</button></div></div>
+function FieldRow(props: SettingTabProps & { field: ProjectCustomField; index: number; total: number }) {
+  const field = props.field
+  if (props.editingFieldId === field.id) return <div className="card grid gap-3 p-4 lg:grid-cols-[1fr_190px_140px_120px_auto_auto_auto]"><input className="input" value={props.editFieldLabel} onChange={(e) => props.setEditFieldLabel(e.target.value)} /><FieldTypeSelect value={props.editFieldType} onChange={props.setEditFieldType} />{props.editFieldType === 'auto_number' ? <><input className="input" value={props.editFieldPrefix} onChange={(e) => props.setEditFieldPrefix(e.target.value)} placeholder="Prefix" /><input className="input" type="number" min={1} value={props.editFieldStart} onChange={(e) => props.setEditFieldStart(Number(e.target.value) || 1)} /></> : <><div></div><div></div></>}<label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.editFieldRequired} onChange={(e) => props.setEditFieldRequired(e.target.checked)} disabled={props.editFieldType === 'auto_number'} />Required</label><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.editFieldShow} onChange={(e) => props.setEditFieldShow(e.target.checked)} />Show in table</label><div className="flex gap-2"><button type="button" className="btn-primary" onClick={() => props.saveFieldEdit(field.id)}>Save</button><button type="button" className="btn-ghost" onClick={props.cancelFieldEdit}>Cancel</button></div>{isDropdownType(props.editFieldType) && <div className="lg:col-span-7"><label className="label">Options</label><textarea className="input" rows={4} value={props.editFieldOptions} onChange={(e) => props.setEditFieldOptions(e.target.value)} placeholder="One option per line or separated by comma" /></div>}</div>
   return <div className="card flex items-center justify-between gap-3 p-4"><div><p className="font-semibold text-cti-ink">{field.label}</p><p className="text-xs text-cti-gray">{fieldSummary(field)}</p></div><div className="flex flex-wrap justify-end gap-2"><button className="btn-ghost px-2 py-1 text-xs" type="button" disabled={props.index === 0} onClick={() => props.moveCustomField(field.id, -1)}>Up</button><button className="btn-ghost px-2 py-1 text-xs" type="button" disabled={props.index === props.total - 1} onClick={() => props.moveCustomField(field.id, 1)}>Down</button><button className="btn-ghost px-2 py-1 text-xs" type="button" onClick={() => props.toggleFieldVisible(field)}>{field.show_in_table ? 'Hide' : 'Show'}</button><button className="btn-ghost px-2 py-1 text-xs" type="button" onClick={() => props.beginEditField(field)}>Edit</button><button className="btn-ghost px-2 py-1 text-xs text-cti-red" type="button" onClick={() => props.deleteCustomField(field.id)}>Delete</button></div></div>
 }
 
@@ -284,7 +308,7 @@ function RecordForm(props: { isAutoPopulate: boolean; template?: Form; signerNam
 }
 
 function ImportPanel({ importText, setImportText, importRecords, isAutoPopulate }: { importText: string; setImportText: (value: string) => void; importRecords: () => void; isAutoPopulate: boolean }) {
-  return <div className="space-y-3"><p className="text-sm text-cti-gray">Paste CSV with headers matching your field labels.{!isAutoPopulate ? ' Include signer_name and signer_email.' : ''} Auto-number fields can be left blank.</p><textarea className="input font-mono text-xs" rows={8} value={importText} onChange={(e) => setImportText(e.target.value)} /><button className="btn-dark" onClick={importRecords}>Import CSV</button></div>
+  return <div className="space-y-3"><p className="text-sm text-cti-gray">Paste CSV with headers matching your field labels.{!isAutoPopulate ? ' Include signer_name and signer_email.' : ''} For multiple dropdown fields, separate selected options with comma.</p><textarea className="input font-mono text-xs" rows={8} value={importText} onChange={(e) => setImportText(e.target.value)} /><button className="btn-dark" onClick={importRecords}>Import CSV</button></div>
 }
 
 function RecordsTable(props: { isAutoPopulate: boolean; records: SignRecord[]; fields: ProjectCustomField[]; recordValues: Record<string, Record<string, string>>; selectedRecords: Record<string, boolean>; setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>> | (() => void); deleteRecord: (recordId: string) => void; markComplete: (recordId: string) => void; completed: boolean }) {
@@ -293,15 +317,28 @@ function RecordsTable(props: { isAutoPopulate: boolean; records: SignRecord[]; f
 
 function CustomValueInputs({ fields, values, setValues }: { fields: ProjectCustomField[]; values: Record<string, string>; setValues: React.Dispatch<React.SetStateAction<Record<string, string>>> }) {
   if (!fields.length) return <p className="text-sm text-cti-gray">No custom fields yet. Add columns in Setting.</p>
-  return <div className="grid gap-4 sm:grid-cols-2">{fields.map((field) => <div key={field.id}><label className="label">{field.label}{field.required ? ' *' : ''}</label>{field.type === 'auto_number' ? <input className="input" readOnly value="Auto generated" /> : <input className="input" type={field.type === 'text' ? 'text' : field.type} required={field.required} value={values[field.id] ?? ''} onChange={(e) => setValues((current) => ({ ...current, [field.id]: e.target.value }))} />}</div>)}</div>
+  return <div className="grid gap-4 sm:grid-cols-2">{fields.map((field) => <div key={field.id}><label className="label">{field.label}{field.required ? ' *' : ''}</label><CustomFieldInput field={field} value={values[field.id] ?? ''} onChange={(value) => setValues((current) => ({ ...current, [field.id]: value }))} /></div>)}</div>
+}
+
+function CustomFieldInput({ field, value, onChange }: { field: ProjectCustomField; value: string; onChange: (value: string) => void }) {
+  const options = normalizeOptions(field.options)
+  if (field.type === 'auto_number') return <input className="input" readOnly value="Auto generated" />
+  if (field.type === 'single_dropdown') return <select className="input" required={field.required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>
+  if (field.type === 'multi_dropdown') {
+    const selected = parseMultiValue(value)
+    return <div className="rounded-md border border-cti-line bg-white p-3"><div className="grid gap-2 sm:grid-cols-2">{options.length === 0 && <p className="text-sm text-cti-gray">No options added.</p>}{options.map((option) => <label key={option} className="flex items-center gap-2 text-sm font-semibold text-cti-ink"><input type="checkbox" checked={selected.includes(option)} onChange={(e) => onChange(toggleMultiValue(value, option, e.target.checked))} />{option}</label>)}</div>{field.required && !selected.length && <input className="sr-only" required value="" onChange={() => {}} />}</div>
+  }
+  return <input className="input" type={inputTypeForCustomField(field)} required={field.required} value={value} onChange={(e) => onChange(e.target.value)} />
 }
 
 function FieldTypeSelect({ value, onChange }: { value: CustomFieldType; onChange: (value: CustomFieldType) => void }) {
-  return <select className="input" value={value} onChange={(e) => onChange(e.target.value as CustomFieldType)}><option value="text">Text</option><option value="date">Date</option><option value="number">Number</option><option value="email">Email</option><option value="auto_number">Auto-number</option></select>
+  return <select className="input" value={value} onChange={(e) => onChange(e.target.value as CustomFieldType)}><option value="text">Text</option><option value="date">Date</option><option value="number">Number</option><option value="email">Email</option><option value="auto_number">Auto-number</option><option value="single_dropdown">Single dropdown</option><option value="multi_dropdown">Multiple dropdown</option></select>
 }
 
 function fieldSummary(field: ProjectCustomField) {
-  const parts = [field.type === 'auto_number' ? `auto-number (${field.auto_prefix ?? ''}${field.auto_start ?? 1})` : field.type]
+  const optionCount = normalizeOptions(field.options).length
+  const typeLabel = field.type === 'auto_number' ? `auto-number (${field.auto_prefix ?? ''}${field.auto_start ?? 1})` : field.type === 'single_dropdown' ? `single dropdown (${optionCount} options)` : field.type === 'multi_dropdown' ? `multiple dropdown (${optionCount} options)` : field.type
+  const parts = [typeLabel]
   if (field.required) parts.push('required')
   parts.push(field.show_in_table ? 'shown in table' : 'hidden from table')
   return parts.join(' - ')
@@ -335,4 +372,44 @@ function EmptyState({ text }: { text: string }) {
 
 function parseTab(value: string | null): ProjectTab {
   return tabs.some((tab) => tab.id === value) ? (value as ProjectTab) : 'template'
+}
+
+function isDropdownType(type: CustomFieldType) {
+  return type === 'single_dropdown' || type === 'multi_dropdown'
+}
+
+function optionTextToList(text: string) {
+  return text.split(/\r?\n|,/).map((value) => value.trim()).filter(Boolean)
+}
+
+function normalizeOptions(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).map((option) => option.trim()).filter(Boolean)
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return normalizeOptions(parsed)
+    } catch {
+      return optionTextToList(value)
+    }
+    return optionTextToList(value)
+  }
+  return []
+}
+
+function parseMultiValue(value: string | undefined) {
+  return (value ?? '').split(',').map((item) => item.trim()).filter(Boolean)
+}
+
+function toggleMultiValue(current: string | undefined, option: string, checked: boolean) {
+  const values = new Set(parseMultiValue(current))
+  if (checked) values.add(option)
+  else values.delete(option)
+  return Array.from(values).join(', ')
+}
+
+function inputTypeForCustomField(field: ProjectCustomField) {
+  if (field.type === 'date') return 'date'
+  if (field.type === 'email') return 'email'
+  if (field.type === 'number') return 'number'
+  return 'text'
 }

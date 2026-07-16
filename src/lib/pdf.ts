@@ -71,9 +71,16 @@ export async function buildSignedPdf(
         height: scaled.height,
       })
     } else {
-      const fontSize = Math.min(14, boxH * 0.7)
+      const padding = 2
+      const fontSize = clamp(f.font_size ?? 11, 6, Math.max(6, boxH * 0.9))
+      const textWidth = font.widthOfTextAtSize(value, fontSize)
+      const align = f.text_align ?? 'left'
+      let textX = boxX + padding
+      if (align === 'center') textX = boxX + Math.max(padding, (boxW - textWidth) / 2)
+      if (align === 'right') textX = boxX + Math.max(padding, boxW - textWidth - padding)
+
       page.drawText(value, {
-        x: boxX + 2,
+        x: textX,
         y: boxY + (boxH - fontSize) / 2,
         size: fontSize,
         font,
@@ -91,4 +98,8 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
   const bytes = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
   return bytes
+}
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v))
 }

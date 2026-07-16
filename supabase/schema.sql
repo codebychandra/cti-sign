@@ -60,6 +60,8 @@ create table if not exists form_fields (
   y            double precision not null,
   width        double precision not null,
   height       double precision not null,
+  text_align   text not null default 'left',   -- left, center, right
+  font_size    int not null default 11,
   required     boolean not null default true,
   sort_order   int not null default 0
 );

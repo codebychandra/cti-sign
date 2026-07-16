@@ -7,47 +7,89 @@ export function Layout({ children }: { children: ReactNode }) {
   const { session, signOut } = useAuth()
   const navigate = useNavigate()
 
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/login')
+  }
+
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-cti-line bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link to="/">
+    <div className="min-h-screen bg-cti-bg lg:flex">
+      <aside className="hidden w-72 shrink-0 border-r border-cti-line bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
+        <div className="border-b border-cti-line px-6 py-5">
+          <Link to="/" aria-label="CTI eSign home">
             <Logo />
           </Link>
-          {session && (
-            <div className="flex flex-wrap items-center justify-end gap-3 text-sm">
-              <nav className="flex items-center gap-1 rounded-md border border-cti-line bg-cti-bg p-1">
-                <NavItem to="/">Projects</NavItem>
-                <NavItem to="/settings">Settings</NavItem>
-              </nav>
-              <span className="hidden text-cti-gray lg:inline">{session.user.email}</span>
-              <button
-                className="btn-ghost"
-                onClick={async () => {
-                  await signOut()
-                  navigate('/login')
-                }}
-              >
+        </div>
+
+        {session && (
+          <>
+            <nav className="flex-1 space-y-1 px-4 py-5">
+              <SidebarItem to="/" icon="P">Projects</SidebarItem>
+              <SidebarItem to="/settings" icon="S">Settings</SidebarItem>
+            </nav>
+            <div className="border-t border-cti-line p-4">
+              <p className="mb-3 truncate text-xs font-semibold text-cti-gray">{session.user.email}</p>
+              <button className="btn-ghost w-full" onClick={handleSignOut}>
                 Sign out
               </button>
             </div>
+          </>
+        )}
+      </aside>
+
+      <div className="min-w-0 flex-1">
+        <header className="sticky top-0 z-20 border-b border-cti-line bg-white lg:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <Link to="/" aria-label="CTI eSign home">
+              <Logo />
+            </Link>
+            {session && (
+              <button className="btn-ghost" onClick={handleSignOut}>
+                Sign out
+              </button>
+            )}
+          </div>
+          {session && (
+            <nav className="flex gap-2 overflow-x-auto border-t border-cti-line px-4 py-2">
+              <MobileItem to="/">Projects</MobileItem>
+              <MobileItem to="/settings">Settings</MobileItem>
+            </nav>
           )}
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        </header>
+
+        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+      </div>
     </div>
   )
 }
 
-function NavItem({ to, children }: { to: string; children: ReactNode }) {
+function SidebarItem({ to, icon, children }: { to: string; icon: string; children: ReactNode }) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
         [
-          'rounded px-3 py-1.5 text-sm font-semibold transition-colors',
-          isActive ? 'bg-white text-cti-black shadow-sm' : 'text-cti-gray hover:text-cti-ink',
+          'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors',
+          isActive ? 'bg-cti-red text-white shadow-sm' : 'text-cti-ink hover:bg-cti-bg',
+        ].join(' ')
+      }
+    >
+      <span className="grid h-7 w-7 place-items-center rounded bg-white/20 text-xs font-bold">{icon}</span>
+      {children}
+    </NavLink>
+  )
+}
+
+function MobileItem({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <NavLink
+      to={to}
+      end={to === '/'}
+      className={({ isActive }) =>
+        [
+          'rounded-md px-3 py-1.5 text-sm font-semibold transition-colors',
+          isActive ? 'bg-cti-red text-white' : 'bg-cti-bg text-cti-ink',
         ].join(' ')
       }
     >

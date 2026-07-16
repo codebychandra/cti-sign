@@ -1,5 +1,6 @@
 export type RecordStatus = 'draft' | 'sent' | 'viewed' | 'completed' | 'declined'
 export type FieldType = 'signature' | 'initials' | 'text' | 'date' | 'name' | 'email'
+export type TextAlign = 'left' | 'center' | 'right'
 export type CustomFieldType = 'text' | 'date' | 'number' | 'email'
 
 export interface Project {
@@ -29,6 +30,8 @@ export interface FormField {
   y: number
   width: number
   height: number
+  text_align: TextAlign
+  font_size: number
   required: boolean
   sort_order: number
 }

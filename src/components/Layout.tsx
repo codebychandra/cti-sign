@@ -15,7 +15,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-cti-bg lg:flex">
       <aside className="hidden w-72 shrink-0 border-r border-cti-line bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
-        <div className="border-b border-cti-line px-6 py-5">
+        <div className="border-b border-cti-line px-5 py-5">
           <Link to="/" aria-label="CTI eSign home">
             <Logo />
           </Link>
@@ -23,7 +23,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
         {session && (
           <>
-            <nav className="flex-1 space-y-1 px-4 py-5">
+            <nav className="flex-1 space-y-2 px-4 py-5">
               <SidebarItem to="/" icon={<ProjectsIcon />}>Projects</SidebarItem>
             </nav>
             <div className="border-t border-cti-line p-4">
@@ -61,8 +61,8 @@ function SidebarItem({ to, icon, children }: { to: string; icon: ReactNode; chil
       end={to === '/'}
       className={({ isActive }) =>
         [
-          'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors',
-          isActive ? 'bg-cti-red text-white shadow-sm' : 'text-cti-ink hover:bg-cti-bg',
+          'flex items-center gap-3 rounded-md border px-3 py-2.5 text-sm font-semibold transition-colors',
+          isActive ? 'border-cti-red bg-cti-red text-white shadow-sm' : 'border-cti-line bg-white text-cti-ink hover:border-cti-gray/40 hover:bg-cti-bg',
         ].join(' ')
       }
     >
@@ -79,8 +79,8 @@ function MobileItem({ to, icon, children }: { to: string; icon: ReactNode; child
       end={to === '/'}
       className={({ isActive }) =>
         [
-          'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors',
-          isActive ? 'bg-cti-red text-white' : 'bg-cti-bg text-cti-ink',
+          'inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors',
+          isActive ? 'border-cti-red bg-cti-red text-white' : 'border-cti-line bg-white text-cti-ink',
         ].join(' ')
       }
     >

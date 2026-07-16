@@ -20,6 +20,7 @@ const TEXT_ALIGN: TextAlign[] = ['left', 'center', 'right']
 
 type LocalField = FormField & { _new?: boolean }
 type FieldMetric = 'x' | 'y' | 'width' | 'height'
+type VerticalAlign = 'top' | 'middle' | 'bottom'
 
 function defaultFontSize(type: FieldType) {
   return type === 'signature' || type === 'initials' ? 18 : 11
@@ -42,6 +43,8 @@ export function FormEditor() {
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null)
   const [pageCount, setPageCount] = useState(0)
   const [fields, setFields] = useState<LocalField[]>([])
+  const [history, setHistory] = useState<LocalField[][]>([])
+  const [future, setFuture] = useState<LocalField[][]>([])
   const [tool, setTool] = useState<FieldType>('signature')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [preview, setPreview] = useState(false)
@@ -58,6 +61,8 @@ export function FormEditor() {
       supabase.from('project_custom_fields').select('*').eq('project_id', loadedForm.project_id).order('sort_order').order('created_at'),
     ])
     setFields(((flds as LocalField[]) ?? []).map(normalizeField))
+    setHistory([])
+    setFuture([])
     setCustomFields((projectFields as ProjectCustomField[]) ?? [])
     if (loadedForm?.template_path) {
       const { data: file, error } = await supabase.storage.from('templates').download(loadedForm.template_path)
@@ -73,11 +78,54 @@ export function FormEditor() {
     load()
   }, [load])
 
+  const pushHistory = useCallback(() => {
+    setHistory((prev) => [...prev.slice(-39), fields])
+    setFuture([])
+  }, [fields])
+
+  const setFieldsWithHistory = (updater: (prev: LocalField[]) => LocalField[]) => {
+    pushHistory()
+    setFields(updater)
+  }
+
+  const undo = () => {
+    setHistory((prev) => {
+      if (!prev.length) return prev
+      const previous = prev[prev.length - 1]
+      setFuture((items) => [fields, ...items].slice(0, 40))
+      setFields(previous)
+      setSelectedIds((ids) => ids.filter((id) => previous.some((field) => field.id === id)))
+      return prev.slice(0, -1)
+    })
+  }
+
+  const redo = () => {
+    setFuture((prev) => {
+      if (!prev.length) return prev
+      const next = prev[0]
+      setHistory((items) => [...items.slice(-39), fields])
+      setFields(next)
+      setSelectedIds((ids) => ids.filter((id) => next.some((field) => field.id === id)))
+      return prev.slice(1)
+    })
+  }
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
 
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) redo()
+        else undo()
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        redo()
+        return
+      }
       if (event.key === 'Escape') {
         setSelectedIds([])
         return
@@ -101,7 +149,7 @@ export function FormEditor() {
 
       event.preventDefault()
       const step = event.shiftKey ? 0.01 : 0.002
-      setFields((prev) => prev.map((field) => {
+      setFieldsWithHistory((prev) => prev.map((field) => {
         if (!selectedIds.includes(field.id)) return field
         return normalizeField({
           ...field,
@@ -113,7 +161,7 @@ export function FormEditor() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [preview, selectedIds, fields])
+  }, [preview, selectedIds, fields, history, future])
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -167,15 +215,15 @@ export function FormEditor() {
       sort_order: fields.length,
       _new: true,
     }
-    setFields((prev) => [...prev, field])
+    setFieldsWithHistory((prev) => [...prev, field])
     setSelectedIds([id])
   }
 
   const updateField = (id: string, patch: Partial<LocalField>) =>
-    setFields((prev) => prev.map((f) => (f.id === id ? normalizeField({ ...f, ...patch }) : f)))
+    setFieldsWithHistory((prev) => prev.map((f) => (f.id === id ? normalizeField({ ...f, ...patch }) : f)))
 
   const updateSelectedFields = (patcher: (field: LocalField) => Partial<LocalField>) => {
-    setFields((prev) => prev.map((field) => selectedIds.includes(field.id) ? normalizeField({ ...field, ...patcher(field) }) : field))
+    setFieldsWithHistory((prev) => prev.map((field) => selectedIds.includes(field.id) ? normalizeField({ ...field, ...patcher(field) }) : field))
   }
 
   const moveField = (id: string, nx: number, ny: number) => {
@@ -197,12 +245,12 @@ export function FormEditor() {
   }
 
   const removeField = (id: string) => {
-    setFields((prev) => prev.filter((f) => f.id !== id))
+    setFieldsWithHistory((prev) => prev.filter((f) => f.id !== id))
     setSelectedIds((prev) => prev.filter((selectedId) => selectedId !== id))
   }
 
   const removeSelectedFields = () => {
-    setFields((prev) => prev.filter((field) => !selectedIds.includes(field.id)))
+    setFieldsWithHistory((prev) => prev.filter((field) => !selectedIds.includes(field.id)))
     setSelectedIds([])
   }
 
@@ -211,6 +259,14 @@ export function FormEditor() {
       if (align === 'left') return { x: 0, text_align: align }
       if (align === 'center') return { x: clamp((1 - field.width) / 2, 0, 1 - field.width), text_align: align }
       return { x: clamp(1 - field.width, 0, 1 - field.width), text_align: align }
+    })
+  }
+
+  const verticalAlignSelectedFields = (align: VerticalAlign) => {
+    updateSelectedFields((field) => {
+      if (align === 'top') return { y: 0 }
+      if (align === 'middle') return { y: clamp((1 - field.height) / 2, 0, 1 - field.height) }
+      return { y: clamp(1 - field.height, 0, 1 - field.height) }
     })
   }
 
@@ -273,6 +329,14 @@ export function FormEditor() {
               </p>
 
               <div className="mt-4 border-t border-cti-line pt-4">
+                <p className="label">Edit</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={undo} disabled={!history.length}>Undo</button>
+                  <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={redo} disabled={!future.length}>Redo</button>
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-cti-line pt-4">
                 <p className="label">Field to place</p>
                 <div className="grid grid-cols-2 gap-2">
                   {FIELD_TYPES.map((t) => (
@@ -282,18 +346,6 @@ export function FormEditor() {
                   ))}
                 </div>
                 <p className="mt-3 text-xs text-cti-gray">Use Text/Date/Number/Email fields for mapped record columns.</p>
-              </div>
-
-              <div className="mt-4 border-t border-cti-line pt-4">
-                <p className="label">Short keys</p>
-                <ul className="space-y-1 text-xs text-cti-gray">
-                  <li><kbd className="rounded border border-cti-line px-1">Ctrl</kbd>/<kbd className="rounded border border-cti-line px-1">Cmd</kbd> + click: multi-select</li>
-                  <li><kbd className="rounded border border-cti-line px-1">Shift</kbd> + click: add/remove field</li>
-                  <li><kbd className="rounded border border-cti-line px-1">Arrow</kbd>: move selected</li>
-                  <li><kbd className="rounded border border-cti-line px-1">Shift</kbd> + arrow: move faster</li>
-                  <li><kbd className="rounded border border-cti-line px-1">Delete</kbd>: delete selected</li>
-                  <li><kbd className="rounded border border-cti-line px-1">Esc</kbd>: clear selection</li>
-                </ul>
               </div>
 
               <label className="btn-ghost mt-4 w-full cursor-pointer text-xs">
@@ -313,6 +365,7 @@ export function FormEditor() {
                 <MultiFieldInspector
                   count={selectedIds.length}
                   onAlign={alignSelectedFields}
+                  onVerticalAlign={verticalAlignSelectedFields}
                   onFullWidth={fullWidthSelectedFields}
                   onDelete={removeSelectedFields}
                 />
@@ -334,7 +387,8 @@ export function FormEditor() {
                 onAdd={(nx, ny) => addField(i, nx, ny)}
                 onSelect={selectField}
                 onMove={moveField}
-                onResize={(id, w, h) => updateField(id, { width: w, height: h })}
+                onResize={(id, w, h) => setFields((prev) => prev.map((field) => field.id === id ? normalizeField({ ...field, width: w, height: h }) : field))}
+                onCommitHistory={pushHistory}
               />
             ))}
           </div>
@@ -354,9 +408,14 @@ function FieldInspector({ field, customFields, onChange, onDelete }: { field: Lo
     onChange({ [key]: clamp(value, min, max) } as Partial<LocalField>)
   }
   const alignField = (align: TextAlign) => {
-    if (align === 'left') onChange({ x: 0 })
-    if (align === 'center') onChange({ x: clamp((1 - field.width) / 2, 0, 1 - field.width) })
-    if (align === 'right') onChange({ x: clamp(1 - field.width, 0, 1 - field.width) })
+    if (align === 'left') onChange({ x: 0, text_align: align })
+    if (align === 'center') onChange({ x: clamp((1 - field.width) / 2, 0, 1 - field.width), text_align: align })
+    if (align === 'right') onChange({ x: clamp(1 - field.width, 0, 1 - field.width), text_align: align })
+  }
+  const alignFieldVertical = (align: VerticalAlign) => {
+    if (align === 'top') onChange({ y: 0 })
+    if (align === 'middle') onChange({ y: clamp((1 - field.height) / 2, 0, 1 - field.height) })
+    if (align === 'bottom') onChange({ y: clamp(1 - field.height, 0, 1 - field.height) })
   }
   const fontSize = field.font_size ?? defaultFontSize(field.type)
   const canMapCustom = !['signature', 'initials', 'signed_date'].includes(field.type)
@@ -395,6 +454,9 @@ function FieldInspector({ field, customFields, onChange, onDelete }: { field: Lo
         <div className="mt-2 grid grid-cols-3 gap-1">
           {TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignField(align)}>{align}</button>)}
         </div>
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          {(['top', 'middle', 'bottom'] as VerticalAlign[]).map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignFieldVertical(align)}>{align}</button>)}
+        </div>
         <button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={() => onChange({ x: 0, width: 1 })}>Full width</button>
       </div>
 
@@ -420,12 +482,15 @@ function FieldInspector({ field, customFields, onChange, onDelete }: { field: Lo
   )
 }
 
-function MultiFieldInspector({ count, onAlign, onFullWidth, onDelete }: { count: number; onAlign: (align: TextAlign) => void; onFullWidth: () => void; onDelete: () => void }) {
+function MultiFieldInspector({ count, onAlign, onVerticalAlign, onFullWidth, onDelete }: { count: number; onAlign: (align: TextAlign) => void; onVerticalAlign: (align: VerticalAlign) => void; onFullWidth: () => void; onDelete: () => void }) {
   return (
     <div className="mt-4 border-t border-cti-line pt-4">
       <p className="label">Selected: {count} fields</p>
       <div className="mt-2 grid grid-cols-3 gap-1">
         {TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onAlign(align)}>{align}</button>)}
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-1">
+        {(['top', 'middle', 'bottom'] as VerticalAlign[]).map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onVerticalAlign(align)}>{align}</button>)}
       </div>
       <button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={onFullWidth}>Full width</button>
       <button className="btn-ghost mt-3 w-full text-cti-red" onClick={onDelete}>Delete selected</button>
@@ -442,7 +507,7 @@ function MetricInput({ label, value, onChange }: { label: string; value: number;
   )
 }
 
-function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selectedIds, preview, onAdd, onSelect, onMove, onResize }: { pdfBytes: ArrayBuffer; pageIndex: number; fields: LocalField[]; customFields: ProjectCustomField[]; selectedIds: string[]; preview: boolean; onAdd: (nx: number, ny: number) => void; onSelect: (id: string, additive?: boolean) => void; onMove: (id: string, nx: number, ny: number) => void; onResize: (id: string, w: number, h: number) => void }) {
+function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selectedIds, preview, onAdd, onSelect, onMove, onResize, onCommitHistory }: { pdfBytes: ArrayBuffer; pageIndex: number; fields: LocalField[]; customFields: ProjectCustomField[]; selectedIds: string[]; preview: boolean; onAdd: (nx: number, ny: number) => void; onSelect: (id: string, additive?: boolean) => void; onMove: (id: string, nx: number, ny: number) => void; onResize: (id: string, w: number, h: number) => void; onCommitHistory: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: RENDER_WIDTH, h: RENDER_WIDTH * 1.3 })
@@ -489,6 +554,7 @@ function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selectedIds, pr
                 const additive = e.ctrlKey || e.metaKey || e.shiftKey
                 const keepGroupSelection = isSelected && selectedIds.length > 1 && !additive
                 if (!keepGroupSelection) onSelect(f.id, additive)
+                onCommitHistory()
                 drag.current = { id: f.id, mode: 'move', sx: e.clientX, sy: e.clientY, ox: f.x, oy: f.y }
                 ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
               }}
@@ -496,7 +562,7 @@ function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selectedIds, pr
               style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, background: preview ? 'rgba(255,255,255,0.08)' : isSelected ? 'rgba(225,27,34,0.18)' : 'rgba(225,27,34,0.12)', border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22', color: preview ? '#111111' : '#B3151B', fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif', fontSize: preview ? `${f.font_size ?? defaultFontSize(f.type)}px` : undefined, justifyContent: preview ? justifyContent : undefined, lineHeight: preview ? '1.1' : undefined, textAlign: align }}
             >
               {preview ? sampleValue(f, customFields) : f.custom_field_id ? customFields.find((field) => field.id === f.custom_field_id)?.label ?? fieldLabel(f.type) : fieldLabel(f.type)}
-              {!preview && <span data-field="1" onPointerDown={(e) => { e.stopPropagation(); onSelect(f.id); drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red" />}
+              {!preview && <span data-field="1" onPointerDown={(e) => { e.stopPropagation(); onSelect(f.id); onCommitHistory(); drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red" />}
             </div>
           )
         })}

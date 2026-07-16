@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard'
 import { ProjectDetail } from './pages/ProjectDetail'
 import { FormEditor } from './pages/FormEditor'
 import { RecordDetail } from './pages/RecordDetail'
+import { Settings } from './pages/Settings'
 import { SignPage } from './pages/SignPage'
 
 function Protected({ children }: { children: JSX.Element }) {
@@ -64,6 +65,16 @@ export default function App() {
           <Protected>
             <Layout>
               <RecordDetail />
+            </Layout>
+          </Protected>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <Protected>
+            <Layout>
+              <Settings />
             </Layout>
           </Protected>
         }

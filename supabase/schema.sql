@@ -35,11 +35,19 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type custom_field_type as enum ('text', 'date', 'number', 'email', 'auto_number');
+  create type custom_field_type as enum ('text', 'date', 'number', 'email', 'auto_number', 'single_dropdown', 'multi_dropdown');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter type custom_field_type add value if not exists 'auto_number';
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter type custom_field_type add value if not exists 'single_dropdown';
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter type custom_field_type add value if not exists 'multi_dropdown';
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -73,9 +81,13 @@ create table if not exists project_custom_fields (
   show_in_table boolean not null default true,
   auto_prefix text,
   auto_start integer not null default 1,
+  options jsonb not null default '[]'::jsonb,
   sort_order int not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table project_custom_fields add column if not exists options jsonb not null default '[]'::jsonb;
+update project_custom_fields set options = '[]'::jsonb where options is null;
 
 create table if not exists form_fields (
   id uuid primary key default gen_random_uuid(),

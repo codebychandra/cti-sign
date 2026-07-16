@@ -4,6 +4,7 @@
 -- ----------------------------------------------------------------------------
 -- Model:
 --   projects ──< forms ──< form_fields          (a form = a template PDF + field map)
+--        └────< project_custom_fields ──< record_custom_values
 --                  └────< records ──< record_values   (a record = one signing instance)
 --
 -- Access model:
@@ -23,6 +24,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   create type field_type as enum ('signature', 'initials', 'text', 'date', 'name', 'email');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type custom_field_type as enum ('text', 'date', 'number', 'email');
 exception when duplicate_object then null; end $$;
 
 -- Tables --------------------------------------------------------------------
@@ -59,6 +64,16 @@ create table if not exists form_fields (
   sort_order   int not null default 0
 );
 
+create table if not exists project_custom_fields (
+  id         uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  label      text not null,
+  type       custom_field_type not null default 'text',
+  required   boolean not null default false,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists records (
   id              uuid primary key default gen_random_uuid(),
   form_id         uuid not null references forms(id) on delete cascade,
@@ -86,26 +101,39 @@ create table if not exists record_values (
   unique (record_id, field_id)
 );
 
+create table if not exists record_custom_values (
+  id         uuid primary key default gen_random_uuid(),
+  record_id  uuid not null references records(id) on delete cascade,
+  field_id   uuid not null references project_custom_fields(id) on delete cascade,
+  value      text,
+  created_at timestamptz not null default now(),
+  unique (record_id, field_id)
+);
+
 create index if not exists idx_forms_project on forms(project_id);
 create index if not exists idx_fields_form on form_fields(form_id);
+create index if not exists idx_project_custom_fields_project on project_custom_fields(project_id);
 create index if not exists idx_records_form on records(form_id);
 create index if not exists idx_records_project on records(project_id);
 create index if not exists idx_records_token on records(token);
 create index if not exists idx_values_record on record_values(record_id);
+create index if not exists idx_record_custom_values_record on record_custom_values(record_id);
 
 -- Row Level Security --------------------------------------------------------
-alter table projects      enable row level security;
-alter table forms         enable row level security;
-alter table form_fields   enable row level security;
-alter table records       enable row level security;
-alter table record_values enable row level security;
+alter table projects             enable row level security;
+alter table forms                enable row level security;
+alter table form_fields          enable row level security;
+alter table project_custom_fields enable row level security;
+alter table records              enable row level security;
+alter table record_values        enable row level security;
+alter table record_custom_values enable row level security;
 
 -- Single-org model: any authenticated CTI staff member can manage all data.
 -- (Tighten to per-owner later by swapping `true` for owner checks.)
 do $$
 declare t text;
 begin
-  foreach t in array array['projects','forms','form_fields','records','record_values']
+  foreach t in array array['projects','forms','form_fields','project_custom_fields','records','record_values','record_custom_values']
   loop
     execute format('drop policy if exists staff_all on %I', t);
     execute format(

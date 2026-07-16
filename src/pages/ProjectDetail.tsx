@@ -9,11 +9,11 @@ import { StatusBadge } from '../components/StatusBadge'
 
 type ProjectTab = 'template' | 'form' | 'completed' | 'setting'
 
-const tabs: { id: ProjectTab; label: string; hint: string }[] = [
-  { id: 'template', label: 'Template', hint: 'Upload and map PDFs' },
-  { id: 'form', label: 'Form', hint: 'Create and send records' },
-  { id: 'completed', label: 'Completed', hint: 'Signed documents' },
-  { id: 'setting', label: 'Setting', hint: 'Fields and email' },
+const tabs: { id: ProjectTab; label: string }[] = [
+  { id: 'template', label: 'Template' },
+  { id: 'form', label: 'Form' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'setting', label: 'Setting' },
 ]
 
 export function ProjectDetail() {
@@ -187,7 +187,6 @@ export function ProjectDetail() {
               ].join(' ')}
             >
               <span className="block text-sm font-bold">{tab.label}</span>
-              <span className="block text-xs">{tab.hint}</span>
             </button>
           ))}
         </div>

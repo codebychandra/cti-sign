@@ -45,6 +45,7 @@ export interface ProjectCustomField {
   label: string
   type: CustomFieldType
   required: boolean
+  show_in_table: boolean
   sort_order: number
   created_at: string
 }

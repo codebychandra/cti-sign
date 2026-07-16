@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { FieldType, Form, FormField } from '../lib/types'
+import type { FieldType, Form, FormField, TextAlign } from '../lib/types'
 import { getPageCount, renderPage } from '../lib/pdf'
 import { PageHeader } from '../components/Layout'
 
@@ -15,7 +15,23 @@ const FIELD_TYPES: { type: FieldType; label: string; w: number; h: number }[] = 
   { type: 'text', label: 'Text', w: 0.26, h: 0.04 },
 ]
 
+const TEXT_ALIGN: TextAlign[] = ['left', 'center', 'right']
+
 type LocalField = FormField & { _new?: boolean }
+type FieldMetric = 'x' | 'y' | 'width' | 'height'
+
+function defaultFontSize(type: FieldType) {
+  return type === 'signature' || type === 'initials' ? 18 : 11
+}
+
+function normalizeField(field: LocalField): LocalField {
+  const align = TEXT_ALIGN.includes(field.text_align) ? field.text_align : 'left'
+  return {
+    ...field,
+    text_align: align,
+    font_size: field.font_size ?? defaultFontSize(field.type),
+  }
+}
 
 export function FormEditor() {
   const { formId } = useParams()
@@ -33,7 +49,7 @@ export function FormEditor() {
     const { data: f } = await supabase.from('forms').select('*').eq('id', formId).single()
     setForm(f as Form)
     const { data: flds } = await supabase.from('form_fields').select('*').eq('form_id', formId).order('sort_order')
-    setFields((flds as LocalField[]) ?? [])
+    setFields(((flds as LocalField[]) ?? []).map(normalizeField))
     if ((f as Form)?.template_path) {
       const { data: file, error } = await supabase.storage.from('templates').download((f as Form).template_path!)
       if (!error && file) {
@@ -86,6 +102,8 @@ export function FormEditor() {
       y: Math.max(0, Math.min(1 - spec.h, ny - spec.h / 2)),
       width: spec.w,
       height: spec.h,
+      text_align: 'left',
+      font_size: defaultFontSize(tool),
       required: true,
       sort_order: fields.length,
       _new: true,
@@ -95,7 +113,7 @@ export function FormEditor() {
   }
 
   const updateField = (id: string, patch: Partial<LocalField>) =>
-    setFields((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)))
+    setFields((prev) => prev.map((f) => (f.id === id ? normalizeField({ ...f, ...patch }) : f)))
 
   const removeField = (id: string) => {
     setFields((prev) => prev.filter((f) => f.id !== id))
@@ -109,7 +127,10 @@ export function FormEditor() {
     // replace-all strategy: delete existing, insert current
     await supabase.from('form_fields').delete().eq('form_id', form.id)
     if (fields.length) {
-      const rows = fields.map(({ _new, ...f }, i) => ({ ...f, sort_order: i }))
+      const rows = fields.map(({ _new, ...f }, i) => ({
+        ...normalizeField(f),
+        sort_order: i,
+      }))
       const { error } = await supabase.from('form_fields').insert(rows)
       if (error) {
         setStatus('Save failed: ' + error.message)
@@ -150,7 +171,7 @@ export function FormEditor() {
           {status && <p className="text-sm text-cti-gray">{status}</p>}
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
           {/* Toolbar */}
           <aside className="lg:sticky lg:top-20 lg:self-start">
             <div className="card p-4">
@@ -234,11 +255,78 @@ function FieldInspector({
   onChange: (p: Partial<LocalField>) => void
   onDelete: () => void
 }) {
+  const setMetric = (key: FieldMetric, raw: string) => {
+    const next = Number(raw)
+    if (!Number.isFinite(next)) return
+    const value = next / 100
+    const max = key === 'x' ? 1 - field.width : key === 'y' ? 1 - field.height : key === 'width' ? 1 - field.x : 1 - field.y
+    const min = key === 'width' ? 0.03 : key === 'height' ? 0.02 : 0
+    onChange({ [key]: clamp(value, min, max) } as Partial<LocalField>)
+  }
+
+  const alignField = (align: TextAlign) => {
+    if (align === 'left') onChange({ x: 0 })
+    if (align === 'center') onChange({ x: clamp((1 - field.width) / 2, 0, 1 - field.width) })
+    if (align === 'right') onChange({ x: clamp(1 - field.width, 0, 1 - field.width) })
+  }
+
+  const fontSize = field.font_size ?? defaultFontSize(field.type)
+
   return (
     <div className="mt-4 border-t border-cti-line pt-4">
       <p className="label">Selected: {field.type}</p>
       <label className="label mt-2">Label</label>
       <input className="input" value={field.label} onChange={(e) => onChange({ label: e.target.value })} />
+
+      <div className="mt-4 border-t border-cti-line pt-4">
+        <p className="label">Field position</p>
+        <div className="grid grid-cols-2 gap-2">
+          <MetricInput label="X" value={field.x} onChange={(value) => setMetric('x', value)} />
+          <MetricInput label="Y" value={field.y} onChange={(value) => setMetric('y', value)} />
+          <MetricInput label="W" value={field.width} onChange={(value) => setMetric('width', value)} />
+          <MetricInput label="H" value={field.height} onChange={(value) => setMetric('height', value)} />
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          {TEXT_ALIGN.map((align) => (
+            <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignField(align)}>
+              {align}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={() => onChange({ x: 0, width: 1 })}>
+          Full width
+        </button>
+      </div>
+
+      <div className="mt-4 border-t border-cti-line pt-4">
+        <p className="label">Text style</p>
+        <label className="label mt-2">Text align</label>
+        <select
+          className="input"
+          value={field.text_align ?? 'left'}
+          onChange={(e) => onChange({ text_align: e.target.value as TextAlign })}
+        >
+          {TEXT_ALIGN.map((align) => (
+            <option key={align} value={align}>
+              {align}
+            </option>
+          ))}
+        </select>
+        <label className="label mt-2">Text size</label>
+        <div className="flex items-center gap-2">
+          <input
+            className="input"
+            type="number"
+            min={6}
+            max={72}
+            step={1}
+            value={fontSize}
+            onChange={(e) => onChange({ font_size: clamp(Number(e.target.value) || defaultFontSize(field.type), 6, 72) })}
+          />
+          <span className="text-xs text-cti-gray">pt</span>
+        </div>
+      </div>
+
       <label className="mt-3 flex items-center gap-2 text-sm">
         <input
           type="checkbox"
@@ -251,6 +339,23 @@ function FieldInspector({
         Delete field
       </button>
     </div>
+  )
+}
+
+function MetricInput({ label, value, onChange }: { label: string; value: number; onChange: (value: string) => void }) {
+  return (
+    <label className="text-xs text-cti-gray">
+      {label}
+      <input
+        className="input mt-1 px-2 py-1 text-xs"
+        type="number"
+        min={0}
+        max={100}
+        step={0.1}
+        value={Number((value * 100).toFixed(1))}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
   )
 }
 
@@ -323,47 +428,53 @@ function PageCanvas({
         onPointerLeave={endDrag}
       >
         <canvas ref={canvasRef} className="block" />
-        {fields.map((f) => (
-          <div
-            key={f.id}
-            data-field="1"
-            onPointerDown={(e) => {
-              if (preview) return
-              e.stopPropagation()
-              onSelect(f.id)
-              drag.current = { id: f.id, mode: 'move', sx: e.clientX, sy: e.clientY, ox: f.x, oy: f.y }
-              ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-            }}
-            className={`absolute flex items-center rounded text-[10px] font-semibold ${
-              selected === f.id && !preview ? 'ring-2 ring-cti-red' : ''
-            } ${preview ? 'justify-start overflow-hidden px-1 normal-case tracking-normal' : 'justify-center uppercase tracking-wide'}`}
-            style={{
-              left: `${f.x * 100}%`,
-              top: `${f.y * 100}%`,
-              width: `${f.width * 100}%`,
-              height: `${f.height * 100}%`,
-              background: preview ? 'rgba(255,255,255,0.08)' : 'rgba(225,27,34,0.12)',
-              border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22',
-              color: preview ? '#111111' : '#B3151B',
-              fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif',
-              fontSize: preview && (f.type === 'signature' || f.type === 'initials') ? '18px' : preview ? '11px' : undefined,
-              lineHeight: preview ? '1.1' : undefined,
-            }}
-          >
-            {preview ? sampleValue(f) : f.type}
-            {!preview && (
-              <span
-                data-field="1"
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }
-                  ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-                }}
-                className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red"
-              />
-            )}
-          </div>
-        ))}
+        {fields.map((f) => {
+          const align = f.text_align ?? 'left'
+          const justifyContent = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start'
+          return (
+            <div
+              key={f.id}
+              data-field="1"
+              onPointerDown={(e) => {
+                if (preview) return
+                e.stopPropagation()
+                onSelect(f.id)
+                drag.current = { id: f.id, mode: 'move', sx: e.clientX, sy: e.clientY, ox: f.x, oy: f.y }
+                ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+              }}
+              className={`absolute flex items-center rounded text-[10px] font-semibold ${
+                selected === f.id && !preview ? 'ring-2 ring-cti-red' : ''
+              } ${preview ? 'overflow-hidden px-1 normal-case tracking-normal' : 'justify-center uppercase tracking-wide'}`}
+              style={{
+                left: `${f.x * 100}%`,
+                top: `${f.y * 100}%`,
+                width: `${f.width * 100}%`,
+                height: `${f.height * 100}%`,
+                background: preview ? 'rgba(255,255,255,0.08)' : 'rgba(225,27,34,0.12)',
+                border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22',
+                color: preview ? '#111111' : '#B3151B',
+                fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif',
+                fontSize: preview ? `${f.font_size ?? defaultFontSize(f.type)}px` : undefined,
+                justifyContent: preview ? justifyContent : undefined,
+                lineHeight: preview ? '1.1' : undefined,
+                textAlign: align,
+              }}
+            >
+              {preview ? sampleValue(f) : f.type}
+              {!preview && (
+                <span
+                  data-field="1"
+                  onPointerDown={(e) => {
+                    e.stopPropagation()
+                    drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }
+                    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+                  }}
+                  className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red"
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

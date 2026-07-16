@@ -45,8 +45,7 @@ export function SignPage() {
         const seed: Record<string, string> = {}
         for (const f of s.fields) {
           if (f.custom_field_id && s.custom_values?.[f.custom_field_id]) seed[f.id] = s.custom_values[f.custom_field_id]
-          else if (f.type === 'date') seed[f.id] = today
-          else if (f.type === 'name') seed[f.id] = s.record.signer_name
+          else if (f.type === 'date' || f.type === 'signed_date') seed[f.id] = today
           else if (f.type === 'email') seed[f.id] = s.record.signer_email
         }
         setValues(seed)
@@ -92,19 +91,19 @@ export function SignPage() {
     }
   }
 
-  if (loading) return <Centered>Loading document…</Centered>
+  if (loading) return <Centered>Loading document...</Centered>
   if (error && !session) return <Centered><span className="text-cti-red">{error}</span></Centered>
   if (done)
     return (
       <Centered>
         <div className="text-center">
-          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-green-100 text-2xl">✓</div>
-          <h1 className="font-heading text-xl font-bold text-cti-black">Thank you — all done!</h1>
+          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-green-100 text-2xl">OK</div>
+          <h1 className="font-heading text-xl font-bold text-cti-black">Thank you, all done!</h1>
           <p className="mt-2 text-cti-gray">Your signature has been submitted for final review. You may close this window.</p>
         </div>
       </Centered>
     )
-  if (!session || !pdfBytes) return <Centered>Preparing…</Centered>
+  if (!session || !pdfBytes) return <Centered>Preparing...</Centered>
 
   return (
     <div className="min-h-screen bg-cti-bg pb-32">
@@ -140,7 +139,7 @@ export function SignPage() {
       <div className="fixed inset-x-0 bottom-0 border-t border-cti-line bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
           {error ? <span className="text-sm text-cti-red">{error}</span> : <span className="text-sm text-cti-gray">Ready when you are.</span>}
-          <button className="btn-primary" onClick={submit} disabled={submitting}>{submitting ? 'Submitting…' : 'Finish & submit'}</button>
+          <button className="btn-primary" onClick={submit} disabled={submitting}>{submitting ? 'Submitting...' : 'Finish & submit'}</button>
         </div>
       </div>
 
@@ -178,8 +177,8 @@ function SignablePage({ pdfBytes, pageIndex, fields, values, onText, onSignReque
               key={f.id}
               value={values[f.id] ?? ''}
               onChange={(e) => onText(f.id, e.target.value)}
-              readOnly={Boolean(f.custom_field_id)}
-              type={f.type === 'date' ? 'date' : f.type === 'email' ? 'email' : 'text'}
+              readOnly={Boolean(f.custom_field_id) || f.type === 'signed_date'}
+              type={f.type === 'date' || f.type === 'signed_date' ? 'date' : f.type === 'email' ? 'email' : f.type === 'number' ? 'number' : 'text'}
               placeholder={f.label || f.type}
               className="absolute rounded border border-cti-blue bg-blue-50/60 px-1 text-xs outline-none focus:bg-white read-only:border-transparent read-only:bg-white/30"
               style={style}

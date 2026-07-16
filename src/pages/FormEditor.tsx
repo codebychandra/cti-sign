@@ -42,10 +42,11 @@ export function FormEditor() {
   const [pageCount, setPageCount] = useState(0)
   const [fields, setFields] = useState<LocalField[]>([])
   const [tool, setTool] = useState<FieldType>('signature')
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [preview, setPreview] = useState(false)
   const [status, setStatus] = useState<string>('')
   const [busy, setBusy] = useState(false)
+  const selectedField = selectedIds.length === 1 ? fields.find((field) => field.id === selectedIds[0]) : null
 
   const load = useCallback(async () => {
     const { data: f } = await supabase.from('forms').select('*').eq('id', formId).single()
@@ -70,6 +71,48 @@ export function FormEditor() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+
+      if (event.key === 'Escape') {
+        setSelectedIds([])
+        return
+      }
+      if (preview || !selectedIds.length) return
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        removeSelectedFields()
+        return
+      }
+
+      const moveByKey: Record<string, [number, number]> = {
+        ArrowLeft: [-1, 0],
+        ArrowRight: [1, 0],
+        ArrowUp: [0, -1],
+        ArrowDown: [0, 1],
+      }
+      const direction = moveByKey[event.key]
+      if (!direction) return
+
+      event.preventDefault()
+      const step = event.shiftKey ? 0.01 : 0.002
+      setFields((prev) => prev.map((field) => {
+        if (!selectedIds.includes(field.id)) return field
+        return normalizeField({
+          ...field,
+          x: clamp(field.x + direction[0] * step, 0, 1 - field.width),
+          y: clamp(field.y + direction[1] * step, 0, 1 - field.height),
+        })
+      }))
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [preview, selectedIds, fields])
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -96,6 +139,13 @@ export function FormEditor() {
     load()
   }
 
+  const selectField = (id: string, additive = false) => {
+    setSelectedIds((prev) => {
+      if (!additive) return [id]
+      return prev.includes(id) ? prev.filter((selectedId) => selectedId !== id) : [...prev, id]
+    })
+  }
+
   const addField = (page: number, nx: number, ny: number) => {
     const spec = FIELD_TYPES.find((t) => t.type === tool)!
     const id = crypto.randomUUID()
@@ -117,15 +167,54 @@ export function FormEditor() {
       _new: true,
     }
     setFields((prev) => [...prev, field])
-    setSelected(id)
+    setSelectedIds([id])
   }
 
   const updateField = (id: string, patch: Partial<LocalField>) =>
     setFields((prev) => prev.map((f) => (f.id === id ? normalizeField({ ...f, ...patch }) : f)))
 
+  const updateSelectedFields = (patcher: (field: LocalField) => Partial<LocalField>) => {
+    setFields((prev) => prev.map((field) => selectedIds.includes(field.id) ? normalizeField({ ...field, ...patcher(field) }) : field))
+  }
+
+  const moveField = (id: string, nx: number, ny: number) => {
+    setFields((prev) => {
+      const anchor = prev.find((field) => field.id === id)
+      if (!anchor) return prev
+      const activeIds = selectedIds.includes(id) && selectedIds.length > 1 ? selectedIds : [id]
+      const dx = nx - anchor.x
+      const dy = ny - anchor.y
+      return prev.map((field) => {
+        if (!activeIds.includes(field.id)) return field
+        return normalizeField({
+          ...field,
+          x: clamp(field.x + dx, 0, 1 - field.width),
+          y: clamp(field.y + dy, 0, 1 - field.height),
+        })
+      })
+    })
+  }
+
   const removeField = (id: string) => {
     setFields((prev) => prev.filter((f) => f.id !== id))
-    if (selected === id) setSelected(null)
+    setSelectedIds((prev) => prev.filter((selectedId) => selectedId !== id))
+  }
+
+  const removeSelectedFields = () => {
+    setFields((prev) => prev.filter((field) => !selectedIds.includes(field.id)))
+    setSelectedIds([])
+  }
+
+  const alignSelectedFields = (align: TextAlign) => {
+    updateSelectedFields((field) => {
+      if (align === 'left') return { x: 0, text_align: align }
+      if (align === 'center') return { x: clamp((1 - field.width) / 2, 0, 1 - field.width), text_align: align }
+      return { x: clamp(1 - field.width, 0, 1 - field.width), text_align: align }
+    })
+  }
+
+  const fullWidthSelectedFields = () => {
+    updateSelectedFields(() => ({ x: 0, width: 1 }))
   }
 
   const save = async () => {
@@ -193,17 +282,38 @@ export function FormEditor() {
                 </div>
                 <p className="mt-3 text-xs text-cti-gray">Use Text/Date/Email/Name fields for mapped record columns.</p>
               </div>
+
+              <div className="mt-4 border-t border-cti-line pt-4">
+                <p className="label">Short keys</p>
+                <ul className="space-y-1 text-xs text-cti-gray">
+                  <li><kbd className="rounded border border-cti-line px-1">Ctrl</kbd>/<kbd className="rounded border border-cti-line px-1">Cmd</kbd> + click: multi-select</li>
+                  <li><kbd className="rounded border border-cti-line px-1">Shift</kbd> + click: add/remove field</li>
+                  <li><kbd className="rounded border border-cti-line px-1">Arrow</kbd>: move selected</li>
+                  <li><kbd className="rounded border border-cti-line px-1">Shift</kbd> + arrow: move faster</li>
+                  <li><kbd className="rounded border border-cti-line px-1">Delete</kbd>: delete selected</li>
+                  <li><kbd className="rounded border border-cti-line px-1">Esc</kbd>: clear selection</li>
+                </ul>
+              </div>
+
               <label className="btn-ghost mt-4 w-full cursor-pointer text-xs">
                 Replace template
                 <input type="file" accept="application/pdf" className="hidden" onChange={onUpload} />
               </label>
 
-              {selected && !preview && (
+              {selectedField && !preview && (
                 <FieldInspector
-                  field={fields.find((f) => f.id === selected)!}
+                  field={selectedField}
                   customFields={customFields}
-                  onChange={(p) => updateField(selected, p)}
-                  onDelete={() => removeField(selected)}
+                  onChange={(p) => updateField(selectedField.id, p)}
+                  onDelete={() => removeField(selectedField.id)}
+                />
+              )}
+              {selectedIds.length > 1 && !preview && (
+                <MultiFieldInspector
+                  count={selectedIds.length}
+                  onAlign={alignSelectedFields}
+                  onFullWidth={fullWidthSelectedFields}
+                  onDelete={removeSelectedFields}
                 />
               )}
               {status && <p className="mt-3 text-xs text-cti-gray">{status}</p>}
@@ -218,11 +328,11 @@ export function FormEditor() {
                 pageIndex={i}
                 fields={fields.filter((f) => f.page === i)}
                 customFields={customFields}
-                selected={selected}
+                selectedIds={selectedIds}
                 preview={preview}
                 onAdd={(nx, ny) => addField(i, nx, ny)}
-                onSelect={setSelected}
-                onMove={(id, nx, ny) => updateField(id, { x: nx, y: ny })}
+                onSelect={selectField}
+                onMove={moveField}
                 onResize={(id, w, h) => updateField(id, { width: w, height: h })}
               />
             ))}
@@ -309,6 +419,19 @@ function FieldInspector({ field, customFields, onChange, onDelete }: { field: Lo
   )
 }
 
+function MultiFieldInspector({ count, onAlign, onFullWidth, onDelete }: { count: number; onAlign: (align: TextAlign) => void; onFullWidth: () => void; onDelete: () => void }) {
+  return (
+    <div className="mt-4 border-t border-cti-line pt-4">
+      <p className="label">Selected: {count} fields</p>
+      <div className="mt-2 grid grid-cols-3 gap-1">
+        {TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onAlign(align)}>{align}</button>)}
+      </div>
+      <button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={onFullWidth}>Full width</button>
+      <button className="btn-ghost mt-3 w-full text-cti-red" onClick={onDelete}>Delete selected</button>
+    </div>
+  )
+}
+
 function MetricInput({ label, value, onChange }: { label: string; value: number; onChange: (value: string) => void }) {
   return (
     <label className="text-xs text-cti-gray">
@@ -318,7 +441,7 @@ function MetricInput({ label, value, onChange }: { label: string; value: number;
   )
 }
 
-function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selected, preview, onAdd, onSelect, onMove, onResize }: { pdfBytes: ArrayBuffer; pageIndex: number; fields: LocalField[]; customFields: ProjectCustomField[]; selected: string | null; preview: boolean; onAdd: (nx: number, ny: number) => void; onSelect: (id: string) => void; onMove: (id: string, nx: number, ny: number) => void; onResize: (id: string, w: number, h: number) => void }) {
+function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selectedIds, preview, onAdd, onSelect, onMove, onResize }: { pdfBytes: ArrayBuffer; pageIndex: number; fields: LocalField[]; customFields: ProjectCustomField[]; selectedIds: string[]; preview: boolean; onAdd: (nx: number, ny: number) => void; onSelect: (id: string, additive?: boolean) => void; onMove: (id: string, nx: number, ny: number) => void; onResize: (id: string, w: number, h: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: RENDER_WIDTH, h: RENDER_WIDTH * 1.3 })
@@ -354,6 +477,7 @@ function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selected, previ
         {fields.map((f) => {
           const align = f.text_align ?? 'left'
           const justifyContent = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start'
+          const isSelected = selectedIds.includes(f.id)
           return (
             <div
               key={f.id}
@@ -361,15 +485,17 @@ function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selected, previ
               onPointerDown={(e) => {
                 if (preview) return
                 e.stopPropagation()
-                onSelect(f.id)
+                const additive = e.ctrlKey || e.metaKey || e.shiftKey
+                const keepGroupSelection = isSelected && selectedIds.length > 1 && !additive
+                if (!keepGroupSelection) onSelect(f.id, additive)
                 drag.current = { id: f.id, mode: 'move', sx: e.clientX, sy: e.clientY, ox: f.x, oy: f.y }
                 ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
               }}
-              className={`absolute flex items-center rounded text-[10px] font-semibold ${selected === f.id && !preview ? 'ring-2 ring-cti-red' : ''} ${preview ? 'overflow-hidden px-1 normal-case tracking-normal' : 'justify-center uppercase tracking-wide'}`}
-              style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, background: preview ? 'rgba(255,255,255,0.08)' : 'rgba(225,27,34,0.12)', border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22', color: preview ? '#111111' : '#B3151B', fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif', fontSize: preview ? `${f.font_size ?? defaultFontSize(f.type)}px` : undefined, justifyContent: preview ? justifyContent : undefined, lineHeight: preview ? '1.1' : undefined, textAlign: align }}
+              className={`absolute flex items-center rounded text-[10px] font-semibold ${isSelected && !preview ? 'ring-2 ring-cti-red ring-offset-1' : ''} ${preview ? 'overflow-hidden px-1 normal-case tracking-normal' : 'justify-center uppercase tracking-wide'}`}
+              style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, background: preview ? 'rgba(255,255,255,0.08)' : isSelected ? 'rgba(225,27,34,0.18)' : 'rgba(225,27,34,0.12)', border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22', color: preview ? '#111111' : '#B3151B', fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif', fontSize: preview ? `${f.font_size ?? defaultFontSize(f.type)}px` : undefined, justifyContent: preview ? justifyContent : undefined, lineHeight: preview ? '1.1' : undefined, textAlign: align }}
             >
               {preview ? sampleValue(f, customFields) : f.custom_field_id ? customFields.find((field) => field.id === f.custom_field_id)?.label ?? f.type : f.type}
-              {!preview && <span data-field="1" onPointerDown={(e) => { e.stopPropagation(); drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red" />}
+              {!preview && <span data-field="1" onPointerDown={(e) => { e.stopPropagation(); onSelect(f.id); drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red" />}
             </div>
           )
         })}

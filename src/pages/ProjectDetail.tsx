@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { getAppSettings } from '../lib/settings'
-import type { CustomFieldType, Form, Project, ProjectCustomField, SignRecord } from '../lib/types'
+import type { CustomFieldType, Form, Project, ProjectCustomField, RecordCustomValue, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
 
@@ -24,31 +24,35 @@ export function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null)
   const [forms, setForms] = useState<Form[]>([])
   const [records, setRecords] = useState<SignRecord[]>([])
+  const [recordValues, setRecordValues] = useState<Record<string, Record<string, string>>>({})
   const [customFields, setCustomFields] = useState<ProjectCustomField[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // create-form state
-  const [newFormName, setNewFormName] = useState('')
-  // create-custom-field state
   const [newFieldLabel, setNewFieldLabel] = useState('')
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('text')
   const [newFieldRequired, setNewFieldRequired] = useState(false)
-  // create-record state
-  const [recFormId, setRecFormId] = useState('')
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null)
+  const [editFieldLabel, setEditFieldLabel] = useState('')
+  const [editFieldType, setEditFieldType] = useState<CustomFieldType>('text')
+  const [editFieldRequired, setEditFieldRequired] = useState(false)
+
   const [signerName, setSignerName] = useState('')
   const [signerEmail, setSignerEmail] = useState('')
   const [message, setMessage] = useState(() => getAppSettings().defaultSignatureMessage)
   const [customValues, setCustomValues] = useState<Record<string, string>>({})
+  const [importText, setImportText] = useState('')
+  const [selectedRecords, setSelectedRecords] = useState<Record<string, boolean>>({})
 
   const load = async () => {
     setLoading(true)
+    setError(null)
     const [{ data: proj }, { data: fms }, { data: recs }, { data: fields, error: fieldsError }] = await Promise.all([
       supabase.from('projects').select('*').eq('id', projectId).single(),
       supabase.from('forms').select('*').eq('project_id', projectId).order('created_at'),
       supabase
         .from('records')
-        .select('id, form_id, project_id, signer_name, signer_email, status, created_at, signed_pdf_path, onedrive_url, completed_at')
+        .select('id, form_id, project_id, signer_name, signer_email, status, created_at, signed_pdf_path, onedrive_url, sent_at, viewed_at, submitted_at, completed_at')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false }),
       supabase
@@ -59,10 +63,21 @@ export function ProjectDetail() {
         .order('created_at'),
     ])
     if (fieldsError) setError('Run the updated Supabase schema to enable project custom fields.')
-    setProject(proj as Project)
+    const loadedRecords = (recs as SignRecord[]) ?? []
+    setProject({ ...(proj as Project), project_type: (proj as Project)?.project_type ?? 'sent_signature' })
     setForms((fms as Form[]) ?? [])
-    setRecords((recs as SignRecord[]) ?? [])
+    setRecords(loadedRecords)
     setCustomFields((fields as ProjectCustomField[]) ?? [])
+
+    if (loadedRecords.length) {
+      const { data: values } = await supabase
+        .from('record_custom_values')
+        .select('*')
+        .in('record_id', loadedRecords.map((record) => record.id))
+      setRecordValues(groupRecordValues((values as RecordCustomValue[]) ?? []))
+    } else {
+      setRecordValues({})
+    }
     setLoading(false)
   }
 
@@ -70,19 +85,19 @@ export function ProjectDetail() {
     load()
   }, [projectId])
 
-  const selectTab = (tab: ProjectTab) => {
-    setSearchParams(tab === 'template' ? {} : { tab })
-  }
+  const selectTab = (tab: ProjectTab) => setSearchParams(tab === 'template' ? {} : { tab })
 
-  const createForm = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newFormName.trim()) return
+  const template = forms[0]
+  const isAutoPopulate = project?.project_type === 'auto_populate'
+  const activeRecords = records.filter((record) => record.status !== 'completed')
+  const completedRecords = records.filter((record) => record.status === 'completed')
+  const missingRequiredCustom = customFields.some((field) => field.required && !customValues[field.id]?.trim())
+
+  const ensureTemplate = async () => {
+    if (template || !projectId) return
     setError(null)
-    const { error } = await supabase
-      .from('forms')
-      .insert({ project_id: projectId, name: newFormName.trim() })
+    const { error } = await supabase.from('forms').insert({ project_id: projectId, name: 'Template' })
     if (error) return setError(error.message)
-    setNewFormName('')
     load()
   }
 
@@ -104,6 +119,25 @@ export function ProjectDetail() {
     load()
   }
 
+  const beginEditField = (field: ProjectCustomField) => {
+    setEditingFieldId(field.id)
+    setEditFieldLabel(field.label)
+    setEditFieldType(field.type)
+    setEditFieldRequired(field.required)
+  }
+
+  const saveFieldEdit = async (fieldId: string) => {
+    if (!editFieldLabel.trim()) return
+    setError(null)
+    const { error } = await supabase
+      .from('project_custom_fields')
+      .update({ label: editFieldLabel.trim(), type: editFieldType, required: editFieldRequired })
+      .eq('id', fieldId)
+    if (error) return setError(error.message)
+    setEditingFieldId(null)
+    load()
+  }
+
   const deleteCustomField = async (fieldId: string) => {
     setError(null)
     const { error } = await supabase.from('project_custom_fields').delete().eq('id', fieldId)
@@ -111,47 +145,93 @@ export function ProjectDetail() {
     load()
   }
 
-  const readyForms = forms.filter((f) => f.template_path)
-  const activeRecords = records.filter((record) => record.status !== 'completed')
-  const completedRecords = records.filter((record) => record.status === 'completed')
-  const missingRequiredCustom = customFields.some((field) => field.required && !customValues[field.id]?.trim())
+  const moveCustomField = async (fieldId: string, direction: -1 | 1) => {
+    const index = customFields.findIndex((field) => field.id === fieldId)
+    const targetIndex = index + direction
+    if (index < 0 || targetIndex < 0 || targetIndex >= customFields.length) return
+    const next = [...customFields]
+    const [moved] = next.splice(index, 1)
+    next.splice(targetIndex, 0, moved)
+    setCustomFields(next.map((field, i) => ({ ...field, sort_order: i })))
+    await Promise.all(next.map((field, i) => supabase.from('project_custom_fields').update({ sort_order: i }).eq('id', field.id)))
+    load()
+  }
 
   const createRecord = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!recFormId || !signerName.trim() || !signerEmail.trim() || missingRequiredCustom) return
+    if (!template || !template.template_path || missingRequiredCustom) return
+    if (!isAutoPopulate && (!signerName.trim() || !signerEmail.trim())) return
     setError(null)
     const { data: record, error } = await supabase
       .from('records')
       .insert({
-        form_id: recFormId,
+        form_id: template.id,
         project_id: projectId,
-        signer_name: signerName.trim(),
-        signer_email: signerEmail.trim(),
-        message: message.trim(),
+        signer_name: isAutoPopulate ? 'Auto populate record' : signerName.trim(),
+        signer_email: isAutoPopulate ? 'no-reply@cti.local' : signerEmail.trim(),
+        message: isAutoPopulate ? '' : message.trim(),
         created_by: session!.user.id,
       })
       .select('id')
       .single()
     if (error) return setError(error.message)
-
-    const rows = customFields
-      .map((field) => ({
-        record_id: record.id,
-        field_id: field.id,
-        value: customValues[field.id]?.trim() ?? '',
-      }))
-      .filter((row) => row.value)
-
-    if (rows.length) {
-      const { error: valuesError } = await supabase.from('record_custom_values').insert(rows)
-      if (valuesError) return setError(valuesError.message)
-    }
-
+    await saveValuesForRecord(record.id, customValues)
     setSignerName('')
     setSignerEmail('')
     setMessage(getAppSettings().defaultSignatureMessage)
     setCustomValues({})
-    setRecFormId('')
+    load()
+  }
+
+  const importRecords = async () => {
+    if (!template || !template.template_path || !importText.trim()) return
+    setError(null)
+    const rows = parseCsv(importText)
+    if (!rows.length) return setError('No import rows found.')
+    for (const row of rows) {
+      const { data: record, error } = await supabase
+        .from('records')
+        .insert({
+          form_id: template.id,
+          project_id: projectId,
+          signer_name: isAutoPopulate ? 'Auto populate record' : row.signer_name || row.name || '',
+          signer_email: isAutoPopulate ? 'no-reply@cti.local' : row.signer_email || row.email || '',
+          message: isAutoPopulate ? '' : message.trim(),
+          created_by: session!.user.id,
+        })
+        .select('id')
+        .single()
+      if (error) return setError(error.message)
+      const values: Record<string, string> = {}
+      for (const field of customFields) values[field.id] = row[field.label] ?? row[field.label.toLowerCase()] ?? ''
+      await saveValuesForRecord(record.id, values)
+    }
+    setImportText('')
+    load()
+  }
+
+  const saveValuesForRecord = async (recordId: string, values: Record<string, string>) => {
+    const rows = customFields
+      .map((field) => ({ record_id: recordId, field_id: field.id, value: values[field.id]?.trim() ?? '' }))
+      .filter((row) => row.value)
+    if (rows.length) await supabase.from('record_custom_values').upsert(rows, { onConflict: 'record_id,field_id' })
+  }
+
+  const massMarkSent = async () => {
+    const ids = Object.entries(selectedRecords).filter(([, selected]) => selected).map(([id]) => id)
+    if (!ids.length) return
+    await supabase.from('records').update({ status: 'sent', sent_at: new Date().toISOString() }).in('id', ids)
+    setSelectedRecords({})
+    load()
+  }
+
+  const deleteRecord = async (recordId: string) => {
+    await supabase.from('records').delete().eq('id', recordId)
+    load()
+  }
+
+  const markComplete = async (recordId: string) => {
+    await supabase.from('records').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', recordId)
     load()
   }
 
@@ -162,7 +242,7 @@ export function ProjectDetail() {
     <>
       <PageHeader
         title={project.name}
-        subtitle={project.description || 'Project workspace'}
+        subtitle={project.project_type === 'auto_populate' ? 'Auto-populate PDF workflow' : 'Signature request workflow'}
         actions={
           <Link to="/" className="btn-ghost">
             ← All projects
@@ -181,9 +261,7 @@ export function ProjectDetail() {
               onClick={() => selectTab(tab.id)}
               className={[
                 'border-b-2 px-4 py-3 text-left transition-colors',
-                activeTab === tab.id
-                  ? 'border-cti-red text-cti-black'
-                  : 'border-transparent text-cti-gray hover:text-cti-ink',
+                activeTab === tab.id ? 'border-cti-red text-cti-black' : 'border-transparent text-cti-gray hover:text-cti-ink',
               ].join(' ')}
             >
               <span className="block text-sm font-bold">{tab.label}</span>
@@ -193,33 +271,8 @@ export function ProjectDetail() {
       </div>
 
       {activeTab === 'template' && (
-        <TemplateTab forms={forms} newFormName={newFormName} setNewFormName={setNewFormName} createForm={createForm} />
-      )}
-
-      {activeTab === 'form' && (
-        <FormTab
-          readyForms={readyForms}
-          forms={forms}
-          records={activeRecords}
-          recFormId={recFormId}
-          setRecFormId={setRecFormId}
-          signerName={signerName}
-          setSignerName={setSignerName}
-          signerEmail={signerEmail}
-          setSignerEmail={setSignerEmail}
-          message={message}
-          setMessage={setMessage}
-          customFields={customFields}
-          customValues={customValues}
-          setCustomValues={setCustomValues}
-          createRecord={createRecord}
-        />
-      )}
-
-      {activeTab === 'completed' && <CompletedTab forms={forms} records={completedRecords} />}
-
-      {activeTab === 'setting' && (
-        <SettingTab
+        <TemplateTab
+          template={template}
           customFields={customFields}
           newFieldLabel={newFieldLabel}
           setNewFieldLabel={setNewFieldLabel}
@@ -227,177 +280,61 @@ export function ProjectDetail() {
           setNewFieldType={setNewFieldType}
           newFieldRequired={newFieldRequired}
           setNewFieldRequired={setNewFieldRequired}
+          editingFieldId={editingFieldId}
+          editFieldLabel={editFieldLabel}
+          setEditFieldLabel={setEditFieldLabel}
+          editFieldType={editFieldType}
+          setEditFieldType={setEditFieldType}
+          editFieldRequired={editFieldRequired}
+          setEditFieldRequired={setEditFieldRequired}
           createCustomField={createCustomField}
+          beginEditField={beginEditField}
+          saveFieldEdit={saveFieldEdit}
+          cancelFieldEdit={() => setEditingFieldId(null)}
           deleteCustomField={deleteCustomField}
+          moveCustomField={moveCustomField}
+          ensureTemplate={ensureTemplate}
         />
       )}
+
+      {activeTab === 'form' && (
+        <FormTab
+          isAutoPopulate={isAutoPopulate}
+          template={template}
+          records={activeRecords}
+          customFields={customFields}
+          recordValues={recordValues}
+          signerName={signerName}
+          setSignerName={setSignerName}
+          signerEmail={signerEmail}
+          setSignerEmail={setSignerEmail}
+          message={message}
+          setMessage={setMessage}
+          customValues={customValues}
+          setCustomValues={setCustomValues}
+          createRecord={createRecord}
+          importText={importText}
+          setImportText={setImportText}
+          importRecords={importRecords}
+          selectedRecords={selectedRecords}
+          setSelectedRecords={setSelectedRecords}
+          massMarkSent={massMarkSent}
+          deleteRecord={deleteRecord}
+          markComplete={markComplete}
+        />
+      )}
+
+      {activeTab === 'completed' && (
+        <CompletedTab records={completedRecords} customFields={customFields} recordValues={recordValues} />
+      )}
+
+      {activeTab === 'setting' && <SettingTab project={project} />}
     </>
   )
 }
 
-function TemplateTab({
-  forms,
-  newFormName,
-  setNewFormName,
-  createForm,
-}: {
-  forms: Form[]
-  newFormName: string
-  setNewFormName: (value: string) => void
-  createForm: (e: React.FormEvent) => void
-}) {
-  return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="font-heading text-lg font-bold text-cti-black">Templates</h2>
-        <p className="mt-1 text-sm text-cti-gray">Create template records, upload PDFs, and map signing fields.</p>
-      </div>
-      <form onSubmit={createForm} className="card flex flex-col gap-3 p-4 sm:flex-row">
-        <input
-          className="input"
-          placeholder="New template name, e.g. NDA 2026"
-          value={newFormName}
-          onChange={(e) => setNewFormName(e.target.value)}
-        />
-        <button className="btn-dark whitespace-nowrap">+ Add template</button>
-      </form>
-      <div className="grid gap-3 lg:grid-cols-2">
-        {forms.length === 0 && <EmptyState text="No templates yet. Add one to upload and map a PDF." />}
-        {forms.map((form) => (
-          <div key={form.id} className="card flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="font-semibold text-cti-ink">{form.name}</p>
-              <p className="text-xs text-cti-gray">
-                {form.template_path ? `Template ready · ${form.page_count} page(s)` : 'No template uploaded'}
-              </p>
-            </div>
-            <Link to={`/forms/${form.id}/edit`} className="btn-ghost whitespace-nowrap">
-              {form.template_path ? 'Edit mapping' : 'Upload & map'}
-            </Link>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function FormTab({
-  readyForms,
-  forms,
-  records,
-  recFormId,
-  setRecFormId,
-  signerName,
-  setSignerName,
-  signerEmail,
-  setSignerEmail,
-  message,
-  setMessage,
-  customFields,
-  customValues,
-  setCustomValues,
-  createRecord,
-}: {
-  readyForms: Form[]
-  forms: Form[]
-  records: SignRecord[]
-  recFormId: string
-  setRecFormId: (value: string) => void
-  signerName: string
-  setSignerName: (value: string) => void
-  signerEmail: string
-  setSignerEmail: (value: string) => void
-  message: string
-  setMessage: (value: string) => void
-  customFields: ProjectCustomField[]
-  customValues: Record<string, string>
-  setCustomValues: React.Dispatch<React.SetStateAction<Record<string, string>>>
-  createRecord: (e: React.FormEvent) => void
-}) {
-  return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,520px)_1fr]">
-      <section>
-        <h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Add record and send signature</h2>
-        {readyForms.length === 0 ? (
-          <EmptyState text="Upload and map a template before creating signature records." />
-        ) : (
-          <form onSubmit={createRecord} className="card space-y-4 p-5">
-            <div>
-              <label className="label">Template</label>
-              <select className="input" value={recFormId} onChange={(e) => setRecFormId(e.target.value)}>
-                <option value="">Select a template…</option>
-                {readyForms.map((form) => (
-                  <option key={form.id} value={form.id}>
-                    {form.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="label">Signer name</label>
-                <input className="input" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Signer email</label>
-                <input className="input" type="email" value={signerEmail} onChange={(e) => setSignerEmail(e.target.value)} />
-              </div>
-            </div>
-            {customFields.length > 0 && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {customFields.map((field) => (
-                  <div key={field.id}>
-                    <label className="label">
-                      {field.label}{field.required ? ' *' : ''}
-                    </label>
-                    <input
-                      className="input"
-                      type={field.type === 'text' ? 'text' : field.type}
-                      required={field.required}
-                      value={customValues[field.id] ?? ''}
-                      onChange={(e) => setCustomValues((values) => ({ ...values, [field.id]: e.target.value }))}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            <div>
-              <label className="label">Message</label>
-              <textarea className="input" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} />
-            </div>
-            <button className="btn-primary">Create record</button>
-          </form>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Active records</h2>
-        <RecordsTable forms={forms} records={records} empty="No active records." />
-      </section>
-    </div>
-  )
-}
-
-function CompletedTab({ forms, records }: { forms: Form[]; records: SignRecord[] }) {
-  return (
-    <section>
-      <h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Completed signed documents</h2>
-      <RecordsTable forms={forms} records={records} empty="No completed signed documents yet." showCompleted />
-    </section>
-  )
-}
-
-function SettingTab({
-  customFields,
-  newFieldLabel,
-  setNewFieldLabel,
-  newFieldType,
-  setNewFieldType,
-  newFieldRequired,
-  setNewFieldRequired,
-  createCustomField,
-  deleteCustomField,
-}: {
+function TemplateTab(props: {
+  template?: Form
   customFields: ProjectCustomField[]
   newFieldLabel: string
   setNewFieldLabel: (value: string) => void
@@ -405,58 +342,227 @@ function SettingTab({
   setNewFieldType: (value: CustomFieldType) => void
   newFieldRequired: boolean
   setNewFieldRequired: (value: boolean) => void
+  editingFieldId: string | null
+  editFieldLabel: string
+  setEditFieldLabel: (value: string) => void
+  editFieldType: CustomFieldType
+  setEditFieldType: (value: CustomFieldType) => void
+  editFieldRequired: boolean
+  setEditFieldRequired: (value: boolean) => void
   createCustomField: (e: React.FormEvent) => void
+  beginEditField: (field: ProjectCustomField) => void
+  saveFieldEdit: (fieldId: string) => void
+  cancelFieldEdit: () => void
   deleteCustomField: (fieldId: string) => void
+  moveCustomField: (fieldId: string, direction: -1 | 1) => void
+  ensureTemplate: () => void
 }) {
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <section>
-        <h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Custom fields</h2>
-        <form onSubmit={createCustomField} className="card mb-4 space-y-4 p-5">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-heading text-lg font-bold text-cti-black">Template setup</h2>
+          <p className="mt-1 text-sm text-cti-gray">Create record columns, then map those fields onto the template PDF.</p>
+        </div>
+        <div className="card flex items-center justify-between gap-3 p-4">
+          <div>
+            <p className="font-semibold text-cti-ink">{props.template?.name ?? 'Template'}</p>
+            <p className="text-sm text-cti-gray">
+              {props.template?.template_path ? `Template ready · ${props.template.page_count} page(s)` : 'No PDF uploaded yet'}
+            </p>
+          </div>
+          {props.template ? (
+            <Link to={`/forms/${props.template.id}/edit`} className="btn-primary whitespace-nowrap">
+              Upload & map PDF
+            </Link>
+          ) : (
+            <button className="btn-primary" onClick={props.ensureTemplate}>
+              Create template
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="font-heading text-lg font-bold text-cti-black">Record columns</h2>
+        <form onSubmit={props.createCustomField} className="card space-y-4 p-5">
           <div>
             <label className="label">Field label</label>
-            <input
-              className="input"
-              placeholder="PO number, Department, Contract value..."
-              value={newFieldLabel}
-              onChange={(e) => setNewFieldLabel(e.target.value)}
-            />
+            <input className="input" value={props.newFieldLabel} onChange={(e) => props.setNewFieldLabel(e.target.value)} />
           </div>
           <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
             <div>
               <label className="label">Type</label>
-              <select className="input" value={newFieldType} onChange={(e) => setNewFieldType(e.target.value as CustomFieldType)}>
-                <option value="text">Text</option>
-                <option value="date">Date</option>
-                <option value="number">Number</option>
-                <option value="email">Email</option>
-              </select>
+              <FieldTypeSelect value={props.newFieldType} onChange={props.setNewFieldType} />
             </div>
             <label className="mt-7 flex items-center gap-2 text-sm font-semibold text-cti-ink">
-              <input type="checkbox" checked={newFieldRequired} onChange={(e) => setNewFieldRequired(e.target.checked)} />
+              <input type="checkbox" checked={props.newFieldRequired} onChange={(e) => props.setNewFieldRequired(e.target.checked)} />
               Required
             </label>
           </div>
           <button className="btn-dark">+ Add field</button>
         </form>
+
         <div className="space-y-2">
-          {customFields.length === 0 && <EmptyState text="No custom fields yet." />}
-          {customFields.map((field) => (
-            <div key={field.id} className="card flex items-center justify-between gap-3 p-4">
-              <div>
-                <p className="font-semibold text-cti-ink">{field.label}</p>
-                <p className="text-xs text-cti-gray">
-                  {field.type}{field.required ? ' · required' : ''}
-                </p>
-              </div>
-              <button className="btn-ghost" type="button" onClick={() => deleteCustomField(field.id)}>
-                Delete
-              </button>
+          {props.customFields.length === 0 && <EmptyState text="No custom fields yet." />}
+          {props.customFields.map((field, index) => (
+            <div key={field.id} className="card p-4">
+              {props.editingFieldId === field.id ? (
+                <div className="space-y-3">
+                  <input className="input" value={props.editFieldLabel} onChange={(e) => props.setEditFieldLabel(e.target.value)} />
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <FieldTypeSelect value={props.editFieldType} onChange={props.setEditFieldType} />
+                    <label className="flex items-center gap-2 text-sm font-semibold text-cti-ink">
+                      <input type="checkbox" checked={props.editFieldRequired} onChange={(e) => props.setEditFieldRequired(e.target.checked)} />
+                      Required
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-primary" onClick={() => props.saveFieldEdit(field.id)}>Save</button>
+                    <button type="button" className="btn-ghost" onClick={props.cancelFieldEdit}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-cti-ink">{field.label}</p>
+                    <p className="text-xs text-cti-gray">{field.type}{field.required ? ' · required' : ''}</p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button className="btn-ghost px-2 py-1 text-xs" type="button" disabled={index === 0} onClick={() => props.moveCustomField(field.id, -1)}>↑</button>
+                    <button className="btn-ghost px-2 py-1 text-xs" type="button" disabled={index === props.customFields.length - 1} onClick={() => props.moveCustomField(field.id, 1)}>↓</button>
+                    <button className="btn-ghost px-2 py-1 text-xs" type="button" onClick={() => props.beginEditField(field)}>Edit</button>
+                    <button className="btn-ghost px-2 py-1 text-xs text-cti-red" type="button" onClick={() => props.deleteCustomField(field.id)}>Delete</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
       </section>
+    </div>
+  )
+}
 
+function FormTab(props: {
+  isAutoPopulate: boolean
+  template?: Form
+  records: SignRecord[]
+  customFields: ProjectCustomField[]
+  recordValues: Record<string, Record<string, string>>
+  signerName: string
+  setSignerName: (value: string) => void
+  signerEmail: string
+  setSignerEmail: (value: string) => void
+  message: string
+  setMessage: (value: string) => void
+  customValues: Record<string, string>
+  setCustomValues: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  createRecord: (e: React.FormEvent) => void
+  importText: string
+  setImportText: (value: string) => void
+  importRecords: () => void
+  selectedRecords: Record<string, boolean>
+  setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  massMarkSent: () => void
+  deleteRecord: (recordId: string) => void
+  markComplete: (recordId: string) => void
+}) {
+  const hasTemplate = Boolean(props.template?.template_path)
+  return (
+    <div className="space-y-6">
+      {!hasTemplate && <EmptyState text="Create and map one template before adding records." />}
+      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+        <section>
+          <h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Add record</h2>
+          <form onSubmit={props.createRecord} className="card space-y-4 p-5">
+            <div>
+              <label className="label">Template</label>
+              <input className="input" readOnly value={props.template?.name ?? 'Template not ready'} />
+            </div>
+            {!props.isAutoPopulate && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label">Signer name</label>
+                  <input className="input" value={props.signerName} onChange={(e) => props.setSignerName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Signer email</label>
+                  <input className="input" type="email" value={props.signerEmail} onChange={(e) => props.setSignerEmail(e.target.value)} />
+                </div>
+              </div>
+            )}
+            <CustomValueInputs fields={props.customFields} values={props.customValues} setValues={props.setCustomValues} />
+            {!props.isAutoPopulate && (
+              <div>
+                <label className="label">Message</label>
+                <textarea className="input" rows={3} value={props.message} onChange={(e) => props.setMessage(e.target.value)} />
+              </div>
+            )}
+            <button className="btn-primary" disabled={!hasTemplate}>Create record</button>
+          </form>
+        </section>
+        <section>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-heading text-lg font-bold text-cti-black">Records</h2>
+            {!props.isAutoPopulate && <button className="btn-primary" onClick={props.massMarkSent}>Mass send selected</button>}
+          </div>
+          <RecordsTable {...props} completed={false} />
+        </section>
+      </div>
+      <section className="card space-y-3 p-5">
+        <h2 className="font-heading text-lg font-bold text-cti-black">Import records</h2>
+        <p className="text-sm text-cti-gray">Paste CSV with headers matching your field labels. For signature projects, include signer_name and signer_email.</p>
+        <textarea className="input font-mono text-xs" rows={5} value={props.importText} onChange={(e) => props.setImportText(e.target.value)} />
+        <button className="btn-dark" onClick={props.importRecords} disabled={!hasTemplate}>Import CSV</button>
+      </section>
+    </div>
+  )
+}
+
+function CompletedTab({ records, customFields, recordValues }: { records: SignRecord[]; customFields: ProjectCustomField[]; recordValues: Record<string, Record<string, string>> }) {
+  return (
+    <section>
+      <h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Completed signed documents</h2>
+      <RecordsTable
+        isAutoPopulate={false}
+        template={undefined}
+        records={records}
+        customFields={customFields}
+        recordValues={recordValues}
+        signerName=""
+        setSignerName={() => {}}
+        signerEmail=""
+        setSignerEmail={() => {}}
+        message=""
+        setMessage={() => {}}
+        customValues={{}}
+        setCustomValues={() => {}}
+        createRecord={() => {}}
+        importText=""
+        setImportText={() => {}}
+        importRecords={() => {}}
+        selectedRecords={{}}
+        setSelectedRecords={() => {}}
+        massMarkSent={() => {}}
+        deleteRecord={() => {}}
+        markComplete={() => {}}
+        completed
+      />
+    </section>
+  )
+}
+
+function SettingTab({ project }: { project: Project }) {
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <section className="card p-5">
+        <h2 className="font-heading text-base font-bold text-cti-black">Workflow</h2>
+        <dl className="mt-4 space-y-3 text-sm">
+          <SettingRow label="Project type" value={project.project_type === 'auto_populate' ? 'Auto populate' : 'Sent signature'} />
+          <SettingRow label="Template rule" value="One template per project" />
+        </dl>
+      </section>
       <aside className="space-y-4">
         <section className="card p-5">
           <h2 className="font-heading text-base font-bold text-cti-black">Email setting</h2>
@@ -466,63 +572,69 @@ function SettingTab({
             <SettingRow label="Function" value="send-signature-request" />
           </dl>
         </section>
-        <section className="card p-5 text-sm text-cti-gray">
-          <h2 className="font-heading text-base font-bold text-cti-black">Secrets</h2>
-          <p className="mt-3">Mail credentials are stored in Supabase Edge Function secrets, not in the browser app.</p>
-        </section>
       </aside>
     </div>
   )
 }
 
-function RecordsTable({
-  forms,
-  records,
-  empty,
-  showCompleted = false,
-}: {
-  forms: Form[]
+function RecordsTable(props: {
+  isAutoPopulate: boolean
   records: SignRecord[]
-  empty: string
-  showCompleted?: boolean
+  customFields: ProjectCustomField[]
+  recordValues: Record<string, Record<string, string>>
+  selectedRecords: Record<string, boolean>
+  setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  deleteRecord: (recordId: string) => void
+  markComplete: (recordId: string) => void
+  completed: boolean
 }) {
   return (
     <div className="card overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-cti-line bg-cti-bg text-xs uppercase text-cti-gray">
           <tr>
-            <th className="px-4 py-3">Signer</th>
-            <th className="px-4 py-3">Template</th>
+            {!props.completed && !props.isAutoPopulate && <th className="px-4 py-3"></th>}
+            <th className="px-4 py-3">Created</th>
+            {!props.isAutoPopulate && <th className="px-4 py-3">Signer</th>}
             <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">{showCompleted ? 'Completed' : 'Created'}</th>
+            {props.customFields.map((field) => <th key={field.id} className="px-4 py-3">{field.label}</th>)}
             <th className="px-4 py-3"></th>
           </tr>
         </thead>
         <tbody>
-          {records.length === 0 && (
-            <tr>
-              <td colSpan={5} className="px-4 py-6 text-center text-cti-gray">
-                {empty}
-              </td>
-            </tr>
+          {props.records.length === 0 && (
+            <tr><td colSpan={props.customFields.length + 5} className="px-4 py-6 text-center text-cti-gray">No records.</td></tr>
           )}
-          {records.map((record) => (
+          {props.records.map((record) => (
             <tr key={record.id} className="border-b border-cti-line last:border-0">
-              <td className="px-4 py-3">
-                <p className="font-semibold text-cti-ink">{record.signer_name}</p>
-                <p className="text-xs text-cti-gray">{record.signer_email}</p>
-              </td>
-              <td className="px-4 py-3 text-cti-gray">{forms.find((form) => form.id === record.form_id)?.name ?? '—'}</td>
-              <td className="px-4 py-3">
-                <StatusBadge status={record.status} />
-              </td>
-              <td className="px-4 py-3 text-cti-gray">
-                {new Date((showCompleted && record.completed_at) || record.created_at).toLocaleDateString()}
-              </td>
+              {!props.completed && !props.isAutoPopulate && (
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(props.selectedRecords[record.id])}
+                    onChange={(e) => props.setSelectedRecords((state) => ({ ...state, [record.id]: e.target.checked }))}
+                  />
+                </td>
+              )}
+              <td className="px-4 py-3 text-cti-gray">{new Date(record.created_at).toLocaleDateString()}</td>
+              {!props.isAutoPopulate && (
+                <td className="px-4 py-3">
+                  <p className="font-semibold text-cti-ink">{record.signer_name}</p>
+                  <p className="text-xs text-cti-gray">{record.signer_email}</p>
+                </td>
+              )}
+              <td className="px-4 py-3"><StatusBadge status={record.status} /></td>
+              {props.customFields.map((field) => (
+                <td key={field.id} className="px-4 py-3 text-cti-gray">{props.recordValues[record.id]?.[field.id] ?? ''}</td>
+              ))}
               <td className="px-4 py-3 text-right">
-                <Link to={`/records/${record.id}`} className="font-semibold text-cti-red hover:underline">
-                  Open
-                </Link>
+                <div className="flex justify-end gap-2">
+                  <Link to={`/records/${record.id}`} className="font-semibold text-cti-red hover:underline">{props.completed ? 'View' : 'Edit'}</Link>
+                  {!props.completed && record.status === 'submitted' && (
+                    <button className="font-semibold text-green-700 hover:underline" onClick={() => props.markComplete(record.id)}>Complete</button>
+                  )}
+                  {!props.completed && <button className="font-semibold text-cti-gray hover:underline" onClick={() => props.deleteRecord(record.id)}>Delete</button>}
+                </div>
               </td>
             </tr>
           ))}
@@ -530,6 +642,59 @@ function RecordsTable({
       </table>
     </div>
   )
+}
+
+function CustomValueInputs({ fields, values, setValues }: { fields: ProjectCustomField[]; values: Record<string, string>; setValues: React.Dispatch<React.SetStateAction<Record<string, string>>> }) {
+  if (!fields.length) return <p className="text-sm text-cti-gray">No custom fields yet. Add columns in the Template tab.</p>
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {fields.map((field) => (
+        <div key={field.id}>
+          <label className="label">{field.label}{field.required ? ' *' : ''}</label>
+          <input
+            className="input"
+            type={field.type === 'text' ? 'text' : field.type}
+            required={field.required}
+            value={values[field.id] ?? ''}
+            onChange={(e) => setValues((current) => ({ ...current, [field.id]: e.target.value }))}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function FieldTypeSelect({ value, onChange }: { value: CustomFieldType; onChange: (value: CustomFieldType) => void }) {
+  return (
+    <select className="input" value={value} onChange={(e) => onChange(e.target.value as CustomFieldType)}>
+      <option value="text">Text</option>
+      <option value="date">Date</option>
+      <option value="number">Number</option>
+      <option value="email">Email</option>
+    </select>
+  )
+}
+
+function groupRecordValues(values: RecordCustomValue[]) {
+  return values.reduce<Record<string, Record<string, string>>>((acc, value) => {
+    if (!acc[value.record_id]) acc[value.record_id] = {}
+    acc[value.record_id][value.field_id] = value.value ?? ''
+    return acc
+  }, {})
+}
+
+function parseCsv(text: string) {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length < 2) return []
+  const headers = lines[0].split(',').map((header) => header.trim())
+  return lines.slice(1).map((line) => {
+    const cells = line.split(',').map((cell) => cell.trim())
+    return headers.reduce<Record<string, string>>((row, header, index) => {
+      row[header] = cells[index] ?? ''
+      row[header.toLowerCase()] = cells[index] ?? ''
+      return row
+    }, {})
+  })
 }
 
 function EmptyState({ text }: { text: string }) {

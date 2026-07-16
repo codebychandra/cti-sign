@@ -1,7 +1,7 @@
 export type RecordStatus = 'draft' | 'sent' | 'viewed' | 'submitted' | 'completed' | 'declined'
 export type FieldType = 'signature' | 'initials' | 'text' | 'textarea' | 'date' | 'signed_date' | 'number' | 'email'
 export type TextAlign = 'left' | 'center' | 'right'
-export type CustomFieldType = 'text' | 'date' | 'number' | 'email' | 'auto_number'
+export type CustomFieldType = 'text' | 'date' | 'number' | 'email' | 'auto_number' | 'single_dropdown' | 'multi_dropdown'
 export type ProjectType = 'sent_signature' | 'auto_populate'
 
 export interface Project {
@@ -48,6 +48,7 @@ export interface ProjectCustomField {
   show_in_table: boolean
   auto_prefix: string | null
   auto_start: number | null
+  options: string[] | null
   sort_order: number
   created_at: string
 }

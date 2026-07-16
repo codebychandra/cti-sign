@@ -1,12 +1,14 @@
-export type RecordStatus = 'draft' | 'sent' | 'viewed' | 'completed' | 'declined'
+export type RecordStatus = 'draft' | 'sent' | 'viewed' | 'submitted' | 'completed' | 'declined'
 export type FieldType = 'signature' | 'initials' | 'text' | 'date' | 'name' | 'email'
 export type TextAlign = 'left' | 'center' | 'right'
 export type CustomFieldType = 'text' | 'date' | 'number' | 'email'
+export type ProjectType = 'sent_signature' | 'auto_populate'
 
 export interface Project {
   id: string
   name: string
   description: string
+  project_type: ProjectType
   owner_id: string
   created_at: string
 }
@@ -25,6 +27,7 @@ export interface FormField {
   form_id: string
   type: FieldType
   label: string
+  custom_field_id: string | null
   page: number
   x: number
   y: number
@@ -60,6 +63,7 @@ export interface SignRecord {
   message: string
   sent_at: string | null
   viewed_at: string | null
+  submitted_at?: string | null
   completed_at: string | null
   created_by: string | null
   created_at: string

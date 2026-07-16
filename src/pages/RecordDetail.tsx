@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { Form, SignRecord } from '../lib/types'
+import type { Form, ProjectCustomField, RecordCustomValue, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
 
@@ -9,6 +9,8 @@ export function RecordDetail() {
   const { recordId } = useParams()
   const [record, setRecord] = useState<SignRecord | null>(null)
   const [form, setForm] = useState<Form | null>(null)
+  const [customFields, setCustomFields] = useState<ProjectCustomField[]>([])
+  const [customValues, setCustomValues] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -17,8 +19,26 @@ export function RecordDetail() {
     const { data: r } = await supabase.from('records').select('*').eq('id', recordId).single()
     setRecord(r as SignRecord)
     if (r) {
-      const { data: f } = await supabase.from('forms').select('*').eq('id', (r as SignRecord).form_id).single()
+      const currentRecord = r as SignRecord
+      const [{ data: f }, { data: fields }, { data: values, error: valuesError }] = await Promise.all([
+        supabase.from('forms').select('*').eq('id', currentRecord.form_id).single(),
+        supabase
+          .from('project_custom_fields')
+          .select('*')
+          .eq('project_id', currentRecord.project_id)
+          .order('sort_order')
+          .order('created_at'),
+        supabase.from('record_custom_values').select('*').eq('record_id', currentRecord.id),
+      ])
+      if (valuesError) setMsg('Run the updated Supabase schema to enable record custom values.')
       setForm(f as Form)
+      setCustomFields((fields as ProjectCustomField[]) ?? [])
+      setCustomValues(
+        ((values as RecordCustomValue[]) ?? []).reduce<Record<string, string>>((acc, value) => {
+          acc[value.field_id] = value.value ?? ''
+          return acc
+        }, {}),
+      )
     }
   }, [recordId])
 
@@ -39,6 +59,24 @@ export function RecordDetail() {
       .eq('id', record.id)
     setMsg('Marked as sent — copy the link below and send it to the signer (e.g. via Outlook).')
     setBusy(false)
+    load()
+  }
+
+  const saveCustomValues = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setMsg(null)
+    const rows = customFields.map((field) => ({
+      record_id: record.id,
+      field_id: field.id,
+      value: customValues[field.id]?.trim() ?? '',
+    }))
+    const { error } = await supabase
+      .from('record_custom_values')
+      .upsert(rows, { onConflict: 'record_id,field_id' })
+    setBusy(false)
+    if (error) return setMsg(error.message)
+    setMsg('Record details saved.')
     load()
   }
 
@@ -130,15 +168,53 @@ export function RecordDetail() {
           {msg && <p className="text-sm text-cti-ink">{msg}</p>}
         </div>
       </div>
+
+      <section className="mt-6">
+        <form onSubmit={saveCustomValues} className="card space-y-4 p-6">
+          <div>
+            <h3 className="font-heading font-bold text-cti-black">Record details</h3>
+            <p className="mt-1 text-sm text-cti-gray">Project custom field values for this signing record.</p>
+          </div>
+
+          {customFields.length === 0 ? (
+            <p className="text-sm text-cti-gray">No project custom fields have been added yet.</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {customFields.map((field) => (
+                <div key={field.id}>
+                  <label className="label">
+                    {field.label}{field.required ? ' *' : ''}
+                  </label>
+                  <input
+                    className="input"
+                    type={field.type === 'text' ? 'text' : field.type}
+                    required={field.required}
+                    value={customValues[field.id] ?? ''}
+                    onChange={(e) =>
+                      setCustomValues((values) => ({ ...values, [field.id]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {customFields.length > 0 && (
+            <button className="btn-primary" disabled={busy}>
+              {busy ? 'Saving…' : 'Save record details'}
+            </button>
+          )}
+        </form>
+      </section>
     </>
   )
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between gap-4">
       <span className="text-sm text-cti-gray">{label}</span>
-      <span className="text-sm font-semibold text-cti-ink">{value}</span>
+      <span className="text-right text-sm font-semibold text-cti-ink">{value}</span>
     </div>
   )
 }

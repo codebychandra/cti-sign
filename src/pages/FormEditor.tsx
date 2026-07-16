@@ -8,11 +8,12 @@ import { PageHeader } from '../components/Layout'
 const RENDER_WIDTH = 720
 const FIELD_TYPES: { type: FieldType; label: string; w: number; h: number }[] = [
   { type: 'signature', label: 'Signature', w: 0.26, h: 0.06 },
+  { type: 'signed_date', label: 'Signed date', w: 0.18, h: 0.04 },
   { type: 'initials', label: 'Initials', w: 0.1, h: 0.05 },
-  { type: 'name', label: 'Full name', w: 0.26, h: 0.04 },
-  { type: 'date', label: 'Date', w: 0.16, h: 0.04 },
-  { type: 'email', label: 'Email', w: 0.26, h: 0.04 },
   { type: 'text', label: 'Text', w: 0.26, h: 0.04 },
+  { type: 'date', label: 'Date', w: 0.16, h: 0.04 },
+  { type: 'number', label: 'Number', w: 0.16, h: 0.04 },
+  { type: 'email', label: 'Email', w: 0.26, h: 0.04 },
 ]
 
 const TEXT_ALIGN: TextAlign[] = ['left', 'center', 'right']
@@ -118,7 +119,7 @@ export function FormEditor() {
     const file = e.target.files?.[0]
     if (!file || !form) return
     setBusy(true)
-    setStatus('Uploading template…')
+    setStatus('Uploading template...')
     const buf = await file.arrayBuffer()
     const count = await getPageCount(buf)
     const path = `${form.id}/${Date.now()}-${file.name}`
@@ -220,7 +221,7 @@ export function FormEditor() {
   const save = async () => {
     if (!form) return
     setBusy(true)
-    setStatus('Saving field mapping…')
+    setStatus('Saving field mapping...')
     await supabase.from('form_fields').delete().eq('form_id', form.id)
     if (fields.length) {
       const rows = fields.map(({ _new, ...f }, i) => ({ ...normalizeField(f), sort_order: i }))
@@ -235,7 +236,7 @@ export function FormEditor() {
     setBusy(false)
   }
 
-  if (!form) return <p className="text-cti-gray">Loading…</p>
+  if (!form) return <p className="text-cti-gray">Loading...</p>
 
   return (
     <>
@@ -244,7 +245,7 @@ export function FormEditor() {
         subtitle="Upload the template PDF, then drop signature fields and mapped record columns."
         actions={
           <div className="flex gap-2">
-            <Link to={`/projects/${form.project_id}`} className="btn-ghost">← Back</Link>
+            <Link to={`/projects/${form.project_id}`} className="btn-ghost">Back</Link>
             <button className="btn-primary" onClick={save} disabled={busy || !pdfBytes}>Save mapping</button>
           </div>
         }
@@ -280,7 +281,7 @@ export function FormEditor() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-3 text-xs text-cti-gray">Use Text/Date/Email/Name fields for mapped record columns.</p>
+                <p className="mt-3 text-xs text-cti-gray">Use Text/Date/Number/Email fields for mapped record columns.</p>
               </div>
 
               <div className="mt-4 border-t border-cti-line pt-4">
@@ -296,7 +297,7 @@ export function FormEditor() {
               </div>
 
               <label className="btn-ghost mt-4 w-full cursor-pointer text-xs">
-                Replace template
+                Replace template PDF
                 <input type="file" accept="application/pdf" className="hidden" onChange={onUpload} />
               </label>
 
@@ -358,11 +359,11 @@ function FieldInspector({ field, customFields, onChange, onDelete }: { field: Lo
     if (align === 'right') onChange({ x: clamp(1 - field.width, 0, 1 - field.width) })
   }
   const fontSize = field.font_size ?? defaultFontSize(field.type)
-  const canMapCustom = field.type !== 'signature' && field.type !== 'initials'
+  const canMapCustom = !['signature', 'initials', 'signed_date'].includes(field.type)
 
   return (
     <div className="mt-4 border-t border-cti-line pt-4">
-      <p className="label">Selected: {field.type}</p>
+      <p className="label">Selected: {field.type === 'signed_date' ? 'signed date' : field.type}</p>
       <label className="label mt-2">Label</label>
       <input className="input" value={field.label} onChange={(e) => onChange({ label: e.target.value })} />
 
@@ -494,7 +495,7 @@ function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selectedIds, pr
               className={`absolute flex items-center rounded text-[10px] font-semibold ${isSelected && !preview ? 'ring-2 ring-cti-red ring-offset-1' : ''} ${preview ? 'overflow-hidden px-1 normal-case tracking-normal' : 'justify-center uppercase tracking-wide'}`}
               style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, background: preview ? 'rgba(255,255,255,0.08)' : isSelected ? 'rgba(225,27,34,0.18)' : 'rgba(225,27,34,0.12)', border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22', color: preview ? '#111111' : '#B3151B', fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif', fontSize: preview ? `${f.font_size ?? defaultFontSize(f.type)}px` : undefined, justifyContent: preview ? justifyContent : undefined, lineHeight: preview ? '1.1' : undefined, textAlign: align }}
             >
-              {preview ? sampleValue(f, customFields) : f.custom_field_id ? customFields.find((field) => field.id === f.custom_field_id)?.label ?? f.type : f.type}
+              {preview ? sampleValue(f, customFields) : f.custom_field_id ? customFields.find((field) => field.id === f.custom_field_id)?.label ?? fieldLabel(f.type) : fieldLabel(f.type)}
               {!preview && <span data-field="1" onPointerDown={(e) => { e.stopPropagation(); onSelect(f.id); drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red" />}
             </div>
           )
@@ -510,8 +511,9 @@ function sampleValue(field: FormField, customFields: ProjectCustomField[]) {
   const label = field.label.toLowerCase()
   if (field.type === 'signature') return 'Agus Chandra'
   if (field.type === 'initials') return 'AC'
-  if (field.type === 'name') return 'Agus Chandra'
+  if (field.type === 'signed_date') return '2026-07-16'
   if (field.type === 'date') return '2026-07-16'
+  if (field.type === 'number') return '12345'
   if (field.type === 'email') return 'cti-it-team@cti-usa.com'
   if (label.includes('passport')) return 'A1234567'
   if (label.includes('seafarer') || label === 'id') return 'SF-10294'
@@ -526,11 +528,16 @@ function sampleCustomValue(field: ProjectCustomField) {
   if (field.type === 'date') return '2026-07-16'
   if (field.type === 'email') return 'crew@example.com'
   if (field.type === 'number') return '12345'
+  if (field.type === 'auto_number') return `${field.auto_prefix ?? ''}${field.auto_start ?? 1}`
   if (label.includes('passport')) return 'A1234567'
   if (label.includes('seafarer') || label === 'id') return 'SF-10294'
   if (label.includes('position') || label.includes('posisi')) return 'Chief Engineer'
   if (label.includes('name') || label.includes('nama')) return 'Agus Chandra'
   return field.label
+}
+
+function fieldLabel(type: FieldType) {
+  return type === 'signed_date' ? 'signed date' : type
 }
 
 function clamp(v: number, min: number, max: number) {

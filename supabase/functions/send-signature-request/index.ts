@@ -13,7 +13,7 @@ const FROM = Deno.env.get('SIGN_FROM_EMAIL') ?? 'CTI Sign <no-reply@cti-usa.com>
 const MS_TENANT_ID = Deno.env.get('MS_TENANT_ID')
 const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID')
 const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET')
-const MS_SEND_FROM = Deno.env.get('MS_SEND_FROM')
+const MS_SEND_FROM = Deno.env.get('MS_SEND_FROM') ?? 'cti-it-team@cti-usa.com'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -62,7 +62,7 @@ function markSent(id: string) {
 }
 
 function isMicrosoftGraphConfigured() {
-  return Boolean(MS_TENANT_ID && MS_CLIENT_ID && MS_CLIENT_SECRET && MS_SEND_FROM)
+  return Boolean(MS_TENANT_ID && MS_CLIENT_ID && MS_CLIENT_SECRET)
 }
 
 async function sendWithMicrosoftGraph(to: string, subject: string, html: string) {
@@ -80,6 +80,7 @@ async function sendWithMicrosoftGraph(to: string, subject: string, html: string)
         subject,
         body: { contentType: 'HTML', content: html },
         toRecipients: [{ emailAddress: { address: to } }],
+        replyTo: [{ emailAddress: { address: MS_SEND_FROM } }],
       },
       saveToSentItems: true,
     }),

@@ -55,8 +55,11 @@ export function RecordDetail() {
   const markSent = async () => {
     setBusy(true)
     setMsg(null)
-    await supabase.from('records').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', record.id)
-    setMsg('Marked as sent. Copy the link below and send it to the signer.')
+    const { data, error } = await supabase.functions.invoke('send-signature-request', {
+      body: { recordId: record.id, appUrl: appBaseUrl() },
+    })
+    if (error || data?.error) setMsg(error?.message ?? data.error)
+    else setMsg(data?.emailed === false ? 'No email provider configured. The record was marked sent for manual sharing.' : 'Signature email sent to the signer.')
     setBusy(false)
     load()
   }
@@ -222,4 +225,8 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="text-right text-sm font-semibold text-cti-ink">{value}</span>
     </div>
   )
+}
+
+function appBaseUrl() {
+  return `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, '')
 }

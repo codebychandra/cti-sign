@@ -200,14 +200,20 @@ export function FormEditor() {
     if (!form) return
     setBusy(true)
     setStatus('Saving field mapping...')
-    await supabase.from('form_fields').delete().eq('form_id', form.id)
-    if (fields.length) {
-      const rows = fields.map(({ _new, ...f }, i) => ({ ...normalizeField(f), sort_order: i }))
-      const { error } = await supabase.from('form_fields').insert(rows)
+    const rows = fields.map(({ _new, ...f }, i) => ({ ...normalizeField(f), sort_order: i }))
+    if (rows.length) {
+      const { error } = await supabase.from('form_fields').upsert(rows)
+      if (error) { setStatus('Save failed: ' + error.message); setBusy(false); return }
+      const keepIds = rows.map((row) => row.id)
+      const { error: deleteError } = await supabase.from('form_fields').delete().eq('form_id', form.id).not('id', 'in', `(${keepIds.join(',')})`)
+      if (deleteError) { setStatus('Save failed: ' + deleteError.message); setBusy(false); return }
+    } else {
+      const { error } = await supabase.from('form_fields').delete().eq('form_id', form.id)
       if (error) { setStatus('Save failed: ' + error.message); setBusy(false); return }
     }
     setStatus(`Saved ${fields.length} field(s).`)
     setBusy(false)
+    load()
   }
 
   if (!form) return <p className="text-cti-gray">Loading...</p>

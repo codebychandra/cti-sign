@@ -239,7 +239,16 @@ export function ProjectDetail() {
   const massMarkSent = async () => {
     const ids = Object.entries(selectedRecords).filter(([, selected]) => selected).map(([id]) => id)
     if (!ids.length) return
-    await supabase.from('records').update({ status: 'sent', sent_at: new Date().toISOString() }).in('id', ids)
+    setError(null)
+    for (const id of ids) {
+      const { data, error } = await supabase.functions.invoke('send-signature-request', {
+        body: { recordId: id, appUrl: appBaseUrl() },
+      })
+      if (error || data?.error) {
+        setError(error?.message ?? data.error)
+        break
+      }
+    }
     setSelectedRecords({})
     load()
   }
@@ -412,4 +421,8 @@ function inputTypeForCustomField(field: ProjectCustomField) {
   if (field.type === 'email') return 'email'
   if (field.type === 'number') return 'number'
   return 'text'
+}
+
+function appBaseUrl() {
+  return `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, '')
 }

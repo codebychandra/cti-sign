@@ -1,5 +1,5 @@
 export type RecordStatus = 'draft' | 'sent' | 'viewed' | 'submitted' | 'completed' | 'declined'
-export type FieldType = 'signature' | 'initials' | 'text' | 'date' | 'signed_date' | 'number' | 'email'
+export type FieldType = 'signature' | 'initials' | 'text' | 'textarea' | 'date' | 'signed_date' | 'number' | 'email'
 export type TextAlign = 'left' | 'center' | 'right'
 export type CustomFieldType = 'text' | 'date' | 'number' | 'email' | 'auto_number'
 export type ProjectType = 'sent_signature' | 'auto_populate'

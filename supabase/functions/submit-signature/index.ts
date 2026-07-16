@@ -1,5 +1,6 @@
 // POST /submit-signature — public, token-gated. Stores the completed PDF the
-// signer's browser produced, records field values, and completes the record.
+// signer's browser produced, records field values, and marks the record as
+// submitted for admin review.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, json } from '../_shared/cors.ts'
 import { uploadToOneDrive } from '../_shared/onedrive.ts'
@@ -24,7 +25,6 @@ Deno.serve(async (req) => {
     if (!record) return json({ error: 'Invalid signing link' }, 404)
     if (record.status === 'completed') return json({ error: 'Already completed' }, 409)
 
-    // decode + store the signed PDF
     const bytes = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0))
     const path = `${record.id}/signed-${Date.now()}.pdf`
     const up = await admin.storage.from('signed').upload(path, bytes, {
@@ -33,7 +33,6 @@ Deno.serve(async (req) => {
     })
     if (up.error) return json({ error: 'Storage failed: ' + up.error.message }, 500)
 
-    // persist captured values (best-effort)
     if (Array.isArray(values) && values.length) {
       const rows = values.map((v: { field_id: string; value: string }) => ({
         record_id: record.id,
@@ -43,7 +42,6 @@ Deno.serve(async (req) => {
       await admin.from('record_values').upsert(rows, { onConflict: 'record_id,field_id' })
     }
 
-    // Auto-save a copy to OneDrive/SharePoint (best-effort; skipped if not configured).
     const safeName = record.signer_name.replace(/[^\w.-]+/g, '_')
     const drive = await uploadToOneDrive(`${safeName}-${record.id}.pdf`, bytes)
     if (drive.error) console.error('OneDrive upload failed:', drive.error)
@@ -51,9 +49,10 @@ Deno.serve(async (req) => {
     await admin
       .from('records')
       .update({
-        status: 'completed',
+        status: 'submitted',
         signed_pdf_path: path,
-        completed_at: new Date().toISOString(),
+        signed_pdf_data: pdfBase64,
+        submitted_at: new Date().toISOString(),
         onedrive_url: drive.webUrl ?? null,
       })
       .eq('id', record.id)

@@ -9,6 +9,7 @@ import { FormEditor } from './pages/FormEditor'
 import { RecordDetail } from './pages/RecordDetail'
 import { Settings } from './pages/Settings'
 import { SignPage } from './pages/SignPage'
+import { OneDriveCallback } from './pages/OneDriveCallback'
 
 function Protected({ children }: { children: JSX.Element }) {
   const { session, loading } = useAuth()
@@ -76,6 +77,15 @@ export default function App() {
             <Layout>
               <Settings />
             </Layout>
+          </Protected>
+        }
+      />
+
+      <Route
+        path="/oauth/onedrive/callback"
+        element={
+          <Protected>
+            <OneDriveCallback />
           </Protected>
         }
       />

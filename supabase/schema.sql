@@ -117,6 +117,7 @@ create table if not exists records (
   signed_pdf_path text,
   signed_pdf_data text,
   onedrive_url text,
+  onedrive_uploaded_at timestamptz,
   message text default '',
   sent_at timestamptz,
   viewed_at timestamptz,
@@ -144,6 +145,21 @@ create table if not exists record_custom_values (
   unique (record_id, field_id)
 );
 
+-- Per-project OneDrive connection (delegated OAuth) for auto-saving completed
+-- PDFs. Tokens are only ever touched by the JWT-protected onedrive-connect
+-- Edge Function (service role) — the frontend never reads them directly.
+create table if not exists onedrive_connections (
+  project_id uuid primary key references projects(id) on delete cascade,
+  refresh_token text not null,
+  access_token text,
+  expires_at timestamptz,
+  folder_id text,
+  folder_path text,
+  account_email text,
+  connected_by uuid references auth.users(id) on delete set null,
+  connected_at timestamptz not null default now()
+);
+
 create index if not exists idx_forms_project on forms(project_id);
 create index if not exists idx_fields_form on form_fields(form_id);
 create index if not exists idx_fields_custom_field on form_fields(custom_field_id);
@@ -161,11 +177,12 @@ alter table project_custom_fields enable row level security;
 alter table records enable row level security;
 alter table record_values enable row level security;
 alter table record_custom_values enable row level security;
+alter table onedrive_connections enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['projects','forms','form_fields','project_custom_fields','records','record_values','record_custom_values']
+  foreach t in array array['projects','forms','form_fields','project_custom_fields','records','record_values','record_custom_values','onedrive_connections']
   loop
     execute format('drop policy if exists staff_all on %I', t);
     execute format('create policy staff_all on %I for all to authenticated using (true) with check (true)', t);

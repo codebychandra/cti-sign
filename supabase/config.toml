@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.send-signature-request]
 verify_jwt = true
+
+[functions.onedrive-connect]
+verify_jwt = true

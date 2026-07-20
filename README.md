@@ -68,35 +68,35 @@ Microsoft Graph here needs the **`Mail.Send`** Application permission (Entra app
 registration, admin-consented) — see 3b below for the same app registration steps,
 just a different permission.
 
-### 3b. (Not currently wired up) OneDrive / SharePoint auto-save
-> ⚠️ **Status:** the OneDrive upload code exists (`supabase/functions/_shared/onedrive.ts`)
-> but only runs inside the old `submit-signature` Edge Function, which the app no
-> longer calls (signing now goes through the `submit_signature` RPC — see step 3).
-> Setting the secrets below will **not** currently save completed PDFs to OneDrive
-> until that upload call is ported into the RPC (or a Postgres trigger). Treat this
-> section as a reference for a future fix, not a working feature yet.
+### 3b. OneDrive — per-project "Connect to OneDrive" (delegated OAuth)
+Each project has its own **Connect to OneDrive** button (Template tab): a staff
+member signs in with Microsoft, picks a destination folder, and from then on
+every record marked **Complete** in that project auto-uploads its signed PDF
+there. This uses the *same* Entra app registration as email (step 3a), with
+two more things added:
 
-Completed PDFs are always stored in Supabase. To *also* drop a copy into OneDrive
-automatically, register an app in Microsoft Entra (Azure AD) — a Microsoft 365
-admin does this once:
-1. **Entra admin center → App registrations → New registration.** Name it "CTI Sign".
-2. **API permissions → Add → Microsoft Graph → Application permissions →
-   `Files.ReadWrite.All`** → then **Grant admin consent**.
-3. **Certificates & secrets → New client secret** → copy the secret *value*.
-4. **Overview** → copy the **Application (client) ID** and **Directory (tenant) ID**.
-5. Set the Supabase secrets:
+1. **Authentication → add a platform → Web** (not "Single-page application" —
+   the code exchange happens server-side, in the Edge Function, with the
+   client secret) → redirect URI:
+   `https://cti-sign.cti-athena.workers.dev/oauth/onedrive/callback`
+   (or your own domain + `/oauth/onedrive/callback`).
+2. **API permissions → Add → Microsoft Graph → Delegated permissions** →
+   `Files.ReadWrite` and `offline_access` → grant admin consent (or each staff
+   member consents individually the first time they click Connect).
+3. Deploy the function and make sure the `MS_*` secrets from step 3a are set
+   (it reuses them):
    ```bash
-   supabase secrets set MS_TENANT_ID=...        # Directory (tenant) ID
-   supabase secrets set MS_CLIENT_ID=...         # Application (client) ID
-   supabase secrets set MS_CLIENT_SECRET=...     # secret value
-   supabase secrets set ONEDRIVE_USER=cti-it-team@cti-usa.com   # OneDrive owner
-   supabase secrets set ONEDRIVE_FOLDER="CTI Sign/Signed"       # optional
+   supabase functions deploy onedrive-connect
    ```
-   For a SharePoint document library instead of a user's OneDrive, set
-   `ONEDRIVE_SITE_ID=<site-id>` in place of `ONEDRIVE_USER`.
+4. The **client ID and tenant ID** (not secret) also need to reach the browser
+   to build the Microsoft sign-in link — already baked into
+   [`.env.production`](.env.production) as `VITE_MS_TENANT_ID` /
+   `VITE_MS_CLIENT_ID`. Update those two if you ever rotate the app registration.
 
-Until these are set, signing works normally — the OneDrive copy is simply skipped.
-When set, each completed record also shows an "Open copy in OneDrive" link.
+Storage: `onedrive_connections` (one row per project — refresh/access token,
+chosen folder, connected account email). Tokens are only ever read/written by
+the `onedrive-connect` function (service role); the frontend only ever
+queries the non-secret columns. Disconnecting a project just deletes its row.
 
 ### 4. Deploy — Cloudflare Workers
 **Live at: https://cti-sign.cti-athena.workers.dev/**
@@ -140,6 +140,9 @@ Project-level custom fields (columns shown in the Completed table): `text`,
 prefix), `single_dropdown`, `multi_dropdown`.
 
 ## Known gaps
-- **OneDrive auto-save is not wired up** — see the warning in step 3b.
 - `docs/deployment-notes.md` has a couple of operational notes worth reading
   before touching the project-detail tabs or the deploy pipeline.
+- `supabase/functions/signing-session`, `submit-signature`, and
+  `_shared/onedrive.ts` are leftover from an earlier design (superseded by the
+  `get_signing_session`/`submit_signature` RPCs and the new `onedrive-connect`
+  function respectively) — not called from the frontend, safe to remove later.

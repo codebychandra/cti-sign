@@ -76,7 +76,8 @@ export function RecordDetail() {
     setBusy(true)
     setMsg(null)
     await supabase.from('records').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', record.id)
-    setMsg('Record marked complete.')
+    const { data, error } = await supabase.functions.invoke('onedrive-connect', { body: { action: 'upload', record_id: record.id } })
+    setMsg(error || data?.error ? 'Marked complete, but OneDrive upload failed: ' + (error?.message ?? data.error) : 'Record marked complete.')
     setBusy(false)
     load()
   }

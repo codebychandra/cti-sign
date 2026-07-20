@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import type { FieldType, Form, FormField, ProjectCustomField, TextAlign } from '../lib/types'
 import { detectFormFields, getPageCount, renderPage, type DetectedField } from '../lib/pdf'
@@ -52,6 +52,7 @@ function detectedToLocalFields(detected: DetectedField[], startIndex: number): L
 
 export function FormEditor() {
   const { formId } = useParams()
+  const navigate = useNavigate()
   const [form, setForm] = useState<Form | null>(null)
   const [customFields, setCustomFields] = useState<ProjectCustomField[]>([])
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null)
@@ -66,13 +67,18 @@ export function FormEditor() {
   const [status, setStatus] = useState<string>('')
   const [busy, setBusy] = useState(false)
   const [detectedFields, setDetectedFields] = useState<DetectedField[]>([])
+  const [dirty, setDirty] = useState(false)
+  const savedFieldsSnapshotRef = useRef<string>('[]')
   const selectedField = selectedIds.length === 1 ? fields.find((field) => field.id === selectedIds[0]) : null
 
   const load = useCallback(async () => {
     const loadedForm = await api.get<Form>('forms', formId!)
     setForm(loadedForm)
     const projectFields = await api.list<ProjectCustomField>('custom-fields', { project_id: loadedForm.project_id })
-    setFields(((loadedForm.fields as LocalField[]) ?? []).map(normalizeField))
+    const loadedFields = ((loadedForm.fields as LocalField[]) ?? []).map(normalizeField)
+    setFields(loadedFields)
+    savedFieldsSnapshotRef.current = JSON.stringify(loadedFields)
+    setDirty(false)
     setHistory([])
     setFuture([])
     setCustomFields(projectFields.sort((a, b) => a.sort_order - b.sort_order))
@@ -85,6 +91,25 @@ export function FormEditor() {
   }, [formId])
 
   useEffect(() => { load() }, [load])
+
+  // Detects ANY change to `fields` (drag, resize, insert, undo/redo, mapping,
+  // delete...) by comparing against the last-loaded-or-saved snapshot, so we
+  // can warn before that work is lost — detected/inserted fields only exist
+  // in the browser until "Save mapping" is clicked.
+  useEffect(() => {
+    const current = JSON.stringify(fields.map(({ _new, ...f }) => f))
+    setDirty(current !== savedFieldsSnapshotRef.current)
+  }, [fields])
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!dirty) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   const pushHistory = useCallback(() => {
     setHistory((prev) => [...prev.slice(-39), fields])
@@ -263,7 +288,26 @@ export function FormEditor() {
   if (!form) return <p className="text-cti-gray">Loading...</p>
 
   return <>
-    <PageHeader title={form.name} subtitle="Upload the template PDF, then drop signature fields and mapped record columns." actions={<div className="flex gap-2"><Link to={`/projects/${form.project_id}`} className="btn-ghost">Back</Link><button className="btn-primary" onClick={save} disabled={busy || !pdfBytes}>Save mapping</button></div>} />
+    <PageHeader
+      title={form.name}
+      subtitle="Upload the template PDF, then drop signature fields and mapped record columns."
+      actions={
+        <div className="flex items-center gap-3">
+          {dirty && <span className="text-xs font-semibold text-cti-red">Unsaved changes</span>}
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              if (dirty && !window.confirm('You have unsaved field changes that will be lost. Leave anyway?')) return
+              navigate(`/projects/${form.project_id}`)
+            }}
+          >
+            Back
+          </button>
+          <button className="btn-primary" onClick={save} disabled={busy || !pdfBytes}>Save mapping</button>
+        </div>
+      }
+    />
     {!pdfBytes ? <div className="card grid place-items-center gap-4 p-12 text-center"><p className="text-cti-gray">No template uploaded yet.</p><label className="btn-primary cursor-pointer">Upload PDF template<input type="file" accept="application/pdf" className="hidden" onChange={onUpload} /></label>{status && <p className="text-sm text-cti-gray">{status}</p>}</div> : (
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-6">{Array.from({ length: pageCount }).map((_, i) => <PageCanvas key={i} pdfBytes={pdfBytes} pageIndex={i} fields={fields.filter((f) => f.page === i)} customFields={customFields} selectedIds={selectedIds} preview={preview} onAdd={(nx, ny) => addField(i, nx, ny)} onSelect={selectField} onMove={moveField} onResize={(id, w, h) => setFields((prev) => prev.map((field) => field.id === id ? normalizeField({ ...field, width: w, height: h }) : field))} onCommitHistory={pushHistory} />)}</div>

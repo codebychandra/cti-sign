@@ -24,4 +24,4 @@ id = "REPLACE_WITH_PRODUCTION_KV_NAMESPACE_ID"
 name = "cti-sign-staging"
 [[env.staging.kv_namespaces]]
 binding = "CTI_SIGN_KV"
-id = "REPLACE_WITH_STAGING_KV_NAMESPACE_ID"
+id = "1eaa67759dec4dd4aeaadab3c1f8dacc"

@@ -27,6 +27,7 @@ function fromB64Url(s: string): Uint8Array {
 export function checkPassword(env: Env, password: string): boolean {
   const a = password
   const b = env.ADMIN_PASSWORD
+  if (!b) return false // ADMIN_PASSWORD secret not set yet
   if (a.length !== b.length) return false
   let diff = 0
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)

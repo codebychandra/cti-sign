@@ -190,13 +190,17 @@ export function FormEditor() {
       setStatus('Template uploaded. No fillable fields detected — place fields manually.')
     } else if (fields.length === 0) {
       setFieldsWithHistory(() => detectedToLocalFields(detected, 0))
-      setStatus(`Template uploaded. Detected and added ${detected.length} fillable field(s) — review each one's type and mapping.`)
+      setStatus(`Template uploaded. Detected and added ${detected.length} fillable field(s) — review each one's type and mapping, then click Save mapping.`)
     } else {
       setDetectedFields(detected)
       setStatus(`Template uploaded. Detected ${detected.length} fillable field(s) — click "Insert detected fields" to add them (existing fields kept as-is).`)
     }
+    // Deliberately not calling load() here: the just-detected/inserted fields
+    // only exist in local state until "Save mapping" is clicked. Reloading
+    // from the server now would overwrite them with the server's still-empty
+    // field list. Just patch the two form properties that actually changed.
+    setForm((prev) => (prev ? { ...prev, page_count: count, has_template: true } : prev))
     setBusy(false)
-    load()
   }
 
   const insertDetectedFields = () => {

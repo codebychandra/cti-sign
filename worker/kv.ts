@@ -38,6 +38,12 @@ export function newId(): string {
   return crypto.randomUUID()
 }
 
+/** Unguessable per-record signing token (matches the old `gen_random_bytes(24)::hex` default). */
+export function newToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(24))
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 export function nowIso(): string {
   return new Date().toISOString()
 }

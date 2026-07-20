@@ -1,4 +1,4 @@
-import { type Env, getCollection, mutateCollection, newId, nowIso, putPdf, getPdf, deletePdf } from './kv'
+import { type Env, getCollection, mutateCollection, newId, newToken, nowIso, putPdf, getPdf, deletePdf } from './kv'
 import { checkPassword, issueSessionToken, verifySessionToken, bearerToken } from './auth'
 import {
   isGraphEmailConfigured,
@@ -181,7 +181,11 @@ async function handleCollection(
 
   if (method === 'POST') {
     const body = (await request.json()) as Record<string, unknown>
-    const item = { id: newId(), created_at: nowIso(), ...body }
+    const item: Record<string, unknown> = { id: newId(), created_at: nowIso(), ...body }
+    // Records need an unguessable signing token — the old Supabase schema
+    // generated this as a database column default; there's no equivalent
+    // here, so it has to be assigned explicitly on creation.
+    if (collection.key === 'records' && !item.token) item.token = newToken()
     await mutateCollection(env, collection.key, (items) => {
       items.push(item)
     })

@@ -1,6 +1,27 @@
 name = "cti-sign"
 compatibility_date = "2026-07-16"
+main = "worker/index.ts"
 
+# Static SPA build output. `run_worker_first = true` routes every request
+# through our fetch handler first — it explicitly falls back to env.ASSETS.fetch()
+# for anything not under /api/*. Without this, asset matching takes priority
+# and /api/* calls could be swallowed by the SPA fallback instead of reaching
+# worker code.
 [assets]
 directory = "./dist/"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
+run_worker_first = true
+
+[[kv_namespaces]]
+binding = "CTI_SIGN_KV"
+id = "REPLACE_WITH_PRODUCTION_KV_NAMESPACE_ID"
+
+# Staging: separate KV namespace + separate deployed name, so Phase 0/1/2
+# validation never touches production data or the live URL.
+# Deploy with: npx wrangler deploy --env staging
+[env.staging]
+name = "cti-sign-staging"
+[[env.staging.kv_namespaces]]
+binding = "CTI_SIGN_KV"
+id = "REPLACE_WITH_STAGING_KV_NAMESPACE_ID"

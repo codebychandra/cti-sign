@@ -5,26 +5,21 @@ import { isConfigured } from '../lib/supabase'
 import { Logo } from '../components/Logo'
 
 export function Login() {
-  const { session, signIn, signUp } = useAuth()
-  const [mode, setMode] = useState<'in' | 'up'>('in')
+  const { session, signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState<string | null>(null)
 
   if (session) return <Navigate to="/" replace />
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setInfo(null)
     setBusy(true)
-    const fn = mode === 'in' ? signIn : signUp
-    const { error } = await fn(email, password)
+    const { error } = await signIn(email, password)
     setBusy(false)
     if (error) setError(error)
-    else if (mode === 'up') setInfo('Account created. If email confirmation is on, check your inbox, then sign in.')
   }
 
   return (
@@ -34,9 +29,7 @@ export function Login() {
           <Logo />
         </div>
         <div className="card p-6">
-          <h1 className="mb-1 font-heading text-xl font-bold text-cti-black">
-            {mode === 'in' ? 'Sign in' : 'Create account'}
-          </h1>
+          <h1 className="mb-1 font-heading text-xl font-bold text-cti-black">Sign in</h1>
           <p className="mb-5 text-sm text-cti-gray">CTI staff access</p>
 
           {!isConfigured && (
@@ -66,26 +59,14 @@ export function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+                autoComplete="current-password"
               />
             </div>
             {error && <p className="text-sm text-cti-red">{error}</p>}
-            {info && <p className="text-sm text-green-700">{info}</p>}
             <button className="btn-primary w-full" disabled={busy || !isConfigured}>
-              {busy ? 'Please wait…' : mode === 'in' ? 'Sign in' : 'Create account'}
+              {busy ? 'Please wait…' : 'Sign in'}
             </button>
           </form>
-
-          <button
-            className="mt-4 w-full text-center text-sm text-cti-gray hover:text-cti-ink"
-            onClick={() => {
-              setMode(mode === 'in' ? 'up' : 'in')
-              setError(null)
-              setInfo(null)
-            }}
-          >
-            {mode === 'in' ? 'Need an account? Create one' : 'Have an account? Sign in'}
-          </button>
         </div>
       </div>
     </div>

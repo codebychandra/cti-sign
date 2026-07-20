@@ -221,6 +221,10 @@ export function FormEditor() {
 
   const updateField = (id: string, patch: Partial<LocalField>) => setFieldsWithHistory((prev) => prev.map((f) => (f.id === id ? normalizeField({ ...f, ...patch }) : f)))
   const updateSelectedFields = (patcher: (field: LocalField) => Partial<LocalField>) => setFieldsWithHistory((prev) => prev.map((field) => selectedIds.includes(field.id) ? normalizeField({ ...field, ...patcher(field) }) : field))
+  const mapFieldToCustom = (fieldId: string, customFieldId: string) => {
+    const match = customFields.find((cf) => cf.id === customFieldId)
+    updateField(fieldId, { custom_field_id: customFieldId || null, label: match?.label ?? fields.find((f) => f.id === fieldId)?.label ?? '' })
+  }
 
   const moveField = (id: string, nx: number, ny: number) => {
     setFields((prev) => {
@@ -275,7 +279,33 @@ export function FormEditor() {
         </div></aside>
       </div>
     )}
+    {pdfBytes && <FieldMappingList fields={fields} customFields={customFields} onMap={mapFieldToCustom} />}
   </>
+}
+
+function FieldMappingList({ fields, customFields, onMap }: { fields: LocalField[]; customFields: ProjectCustomField[]; onMap: (fieldId: string, customFieldId: string) => void }) {
+  const mappable = fields.filter((f) => !['signature', 'initials', 'signed_date'].includes(f.type)).sort((a, b) => a.sort_order - b.sort_order)
+  if (!mappable.length) return null
+  return (
+    <div className="card mt-6 p-5">
+      <h2 className="font-heading text-base font-bold text-cti-black">Map fields to record columns</h2>
+      <p className="mt-1 text-sm text-cti-gray">
+        Each number here matches the number badge on the same field on the PDF above. Pick which record column
+        auto-fills each one — the rest stay blank for the signer or auto-populate to type in.
+      </p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {mappable.map((f) => (
+          <div key={f.id} className="flex items-center gap-2 rounded-md border border-cti-line p-2">
+            <span className="w-12 shrink-0 text-xs font-semibold text-cti-gray">#{f.sort_order + 1}</span>
+            <select className="input py-1 text-xs" value={f.custom_field_id ?? ''} onChange={(e) => onMap(f.id, e.target.value)}>
+              <option value="">Signer/manual field</option>
+              {customFields.map((cf) => <option key={cf.id} value={cf.id}>{cf.label}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function FieldInspector({ field, customFields, onChange, onDelete }: { field: LocalField; customFields: ProjectCustomField[]; onChange: (p: Partial<LocalField>) => void; onDelete: () => void }) {
@@ -304,7 +334,7 @@ function PageCanvas({ pdfBytes, pageIndex, fields, customFields, selectedIds, pr
   const handleClick = (e: React.MouseEvent) => { if (preview || drag.current || (e.target as HTMLElement).dataset.field) return; const rect = wrapRef.current!.getBoundingClientRect(); onAdd((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height) }
   const onPointerMove = (e: React.PointerEvent) => { if (preview || !drag.current) return; const rect = wrapRef.current!.getBoundingClientRect(); const dx = (e.clientX - drag.current.sx) / rect.width; const dy = (e.clientY - drag.current.sy) / rect.height; const f = fields.find((x) => x.id === drag.current!.id); if (!f) return; if (drag.current.mode === 'move') onMove(f.id, clamp(drag.current.ox + dx, 0, 1 - f.width), clamp(drag.current.oy + dy, 0, 1 - f.height)); else onResize(f.id, clamp(drag.current.ox + dx, 0.03, 1 - f.x), clamp(drag.current.oy + dy, 0.02, 1 - f.y)) }
   const endDrag = () => (drag.current = null)
-  return <div className="card inline-block overflow-hidden p-0"><div ref={wrapRef} className={`relative ${preview ? 'cursor-default' : 'cursor-crosshair'}`} style={{ width: size.w, height: size.h }} onClick={handleClick} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerLeave={endDrag}><canvas ref={canvasRef} className="block" />{fields.map((f) => { const align = f.text_align ?? 'left'; const justifyContent = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start'; const isSelected = selectedIds.includes(f.id); return <div key={f.id} data-field="1" onPointerDown={(e) => { if (preview) return; e.stopPropagation(); const additive = e.ctrlKey || e.metaKey || e.shiftKey; const keepGroupSelection = isSelected && selectedIds.length > 1 && !additive; if (!keepGroupSelection) onSelect(f.id, additive); onCommitHistory(); drag.current = { id: f.id, mode: 'move', sx: e.clientX, sy: e.clientY, ox: f.x, oy: f.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className={`absolute flex items-center rounded text-[10px] font-semibold ${isSelected && !preview ? 'ring-2 ring-cti-red ring-offset-1' : ''} ${preview ? 'overflow-hidden px-1 normal-case tracking-normal whitespace-pre-wrap' : 'justify-center uppercase tracking-wide'}`} style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, background: preview ? 'rgba(255,255,255,0.08)' : isSelected ? 'rgba(225,27,34,0.18)' : 'rgba(225,27,34,0.12)', border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22', color: preview ? '#111111' : '#B3151B', fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif', fontSize: preview ? `${f.font_size ?? defaultFontSize(f.type)}px` : undefined, justifyContent: preview ? justifyContent : undefined, alignItems: preview && f.type === 'textarea' ? 'flex-start' : undefined, lineHeight: preview ? '1.2' : undefined, textAlign: align }}>{preview ? sampleValue(f, customFields) : f.custom_field_id ? customFields.find((field) => field.id === f.custom_field_id)?.label ?? fieldLabel(f.type) : fieldLabel(f.type)}{!preview && <span data-field="1" onPointerDown={(e) => { e.stopPropagation(); onSelect(f.id); onCommitHistory(); drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red" />}</div> })}</div></div>
+  return <div className="card inline-block overflow-hidden p-0"><div ref={wrapRef} className={`relative ${preview ? 'cursor-default' : 'cursor-crosshair'}`} style={{ width: size.w, height: size.h }} onClick={handleClick} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerLeave={endDrag}><canvas ref={canvasRef} className="block" />{fields.map((f) => { const align = f.text_align ?? 'left'; const justifyContent = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start'; const isSelected = selectedIds.includes(f.id); return <div key={f.id} data-field="1" onPointerDown={(e) => { if (preview) return; e.stopPropagation(); const additive = e.ctrlKey || e.metaKey || e.shiftKey; const keepGroupSelection = isSelected && selectedIds.length > 1 && !additive; if (!keepGroupSelection) onSelect(f.id, additive); onCommitHistory(); drag.current = { id: f.id, mode: 'move', sx: e.clientX, sy: e.clientY, ox: f.x, oy: f.y }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className={`absolute flex items-center rounded text-[10px] font-semibold ${isSelected && !preview ? 'ring-2 ring-cti-red ring-offset-1' : ''} ${preview ? 'overflow-hidden px-1 normal-case tracking-normal whitespace-pre-wrap' : 'justify-center uppercase tracking-wide'}`} style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, background: preview ? 'rgba(255,255,255,0.08)' : isSelected ? 'rgba(225,27,34,0.18)' : 'rgba(225,27,34,0.12)', border: preview ? '1px solid rgba(22,163,74,0.7)' : '1px dashed #E11B22', color: preview ? '#111111' : '#B3151B', fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'Arial, sans-serif', fontSize: preview ? `${f.font_size ?? defaultFontSize(f.type)}px` : undefined, justifyContent: preview ? justifyContent : undefined, alignItems: preview && f.type === 'textarea' ? 'flex-start' : undefined, lineHeight: preview ? '1.2' : undefined, textAlign: align }}>{preview ? sampleValue(f, customFields) : f.custom_field_id ? customFields.find((field) => field.id === f.custom_field_id)?.label ?? fieldLabel(f.type) : `#${f.sort_order + 1} ${fieldLabel(f.type)}`}{!preview && <span data-field="1" onPointerDown={(e) => { e.stopPropagation(); onSelect(f.id); onCommitHistory(); drag.current = { id: f.id, mode: 'resize', sx: e.clientX, sy: e.clientY, ox: f.width, oy: f.height }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }} className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize bg-cti-red" />}</div> })}</div></div>
 }
 
 function sampleValue(field: FormField, customFields: ProjectCustomField[]) {

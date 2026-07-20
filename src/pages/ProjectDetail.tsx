@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { api } from '../lib/api'
 import { getAppSettings } from '../lib/settings'
 import { buildSignedPdf } from '../lib/pdf'
-import type { CustomFieldType, Form, FormField, Project, ProjectCustomField, RecordCustomValue, SignRecord } from '../lib/types'
+import type { CustomFieldType, Form, Project, ProjectCustomField, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
 import { OneDriveConnectPanel } from '../components/OneDriveConnectPanel'
@@ -20,13 +19,11 @@ const tabs: { id: ProjectTab; label: string }[] = [
 
 export function ProjectDetail() {
   const { projectId } = useParams()
-  const { session } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = parseTab(searchParams.get('tab'))
   const [project, setProject] = useState<Project | null>(null)
   const [forms, setForms] = useState<Form[]>([])
   const [records, setRecords] = useState<SignRecord[]>([])
-  const [recordValues, setRecordValues] = useState<Record<string, Record<string, string>>>({})
   const [customFields, setCustomFields] = useState<ProjectCustomField[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -58,27 +55,23 @@ export function ProjectDetail() {
   const load = async () => {
     setLoading(true)
     setError(null)
-    const [{ data: proj }, { data: fms }, { data: recs }, { data: fields, error: fieldsError }] = await Promise.all([
-      supabase.from('projects').select('*').eq('id', projectId).single(),
-      supabase.from('forms').select('*').eq('project_id', projectId).order('created_at'),
-      supabase
-        .from('records')
-        .select('id, form_id, project_id, signer_name, signer_email, status, created_at, signed_pdf_path, signed_pdf_data, onedrive_url, sent_at, viewed_at, submitted_at, completed_at')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false }),
-      supabase.from('project_custom_fields').select('*').eq('project_id', projectId).order('sort_order').order('created_at'),
-    ])
-    if (fieldsError) setError('Run the updated Supabase schema to enable project custom fields.')
-    const loadedRecords = (recs as SignRecord[]) ?? []
-    setProject({ ...(proj as Project), project_type: (proj as Project)?.project_type ?? 'sent_signature' })
-    setForms((fms as Form[]) ?? [])
-    setRecords(loadedRecords)
-    setCustomFields(((fields as ProjectCustomField[]) ?? []).map((field) => ({ ...field, show_in_table: field.show_in_table ?? true, auto_prefix: field.auto_prefix ?? '', auto_start: field.auto_start ?? 1, options: normalizeOptions(field.options) })))
-    if (loadedRecords.length) {
-      const { data: values } = await supabase.from('record_custom_values').select('*').in('record_id', loadedRecords.map((record) => record.id))
-      setRecordValues(groupRecordValues((values as RecordCustomValue[]) ?? []))
-    } else {
-      setRecordValues({})
+    try {
+      const [proj, fms, recs, fields] = await Promise.all([
+        api.get<Project>('projects', projectId!),
+        api.list<Form>('forms', { project_id: projectId! }),
+        api.list<SignRecord>('records', { project_id: projectId! }),
+        api.list<ProjectCustomField>('custom-fields', { project_id: projectId! }),
+      ])
+      setProject({ ...proj, project_type: proj.project_type ?? 'sent_signature' })
+      setForms(fms.sort((a, b) => a.created_at.localeCompare(b.created_at)))
+      setRecords(recs.sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      setCustomFields(
+        fields
+          .map((field) => ({ ...field, show_in_table: field.show_in_table ?? true, auto_prefix: field.auto_prefix ?? '', auto_start: field.auto_start ?? 1, options: normalizeOptions(field.options) }))
+          .sort((a, b) => a.sort_order - b.sort_order),
+      )
+    } catch (e) {
+      setError((e as Error).message)
     }
     setLoading(false)
   }
@@ -90,47 +83,60 @@ export function ProjectDetail() {
   const template = forms[0]
   const isAutoPopulate = project?.project_type === 'auto_populate'
   const visibleFields = customFields.filter((field) => field.show_in_table)
+  const recordValues = groupRecordValues(records)
   const activeRecords = records.filter((record) => record.status !== 'completed')
   const completedRecords = records.filter((record) => record.status === 'completed')
   const missingRequiredCustom = customFields.some((field) => field.type !== 'auto_number' && field.required && !customValues[field.id]?.trim())
 
   const ensureTemplate = async () => {
     if (template || !projectId) return
-    const { error } = await supabase.from('forms').insert({ project_id: projectId, name: 'Template' })
-    if (error) return setError(error.message)
+    try {
+      await api.create('forms', { project_id: projectId, name: 'Template' })
+    } catch (e) {
+      return setError((e as Error).message)
+    }
     load()
   }
 
   const renameTemplate = async (templateId: string, name: string) => {
     const cleanName = name.trim()
     if (!cleanName) return
-    const { error } = await supabase.from('forms').update({ name: cleanName }).eq('id', templateId)
-    if (error) return setError(error.message)
+    try {
+      await api.update('forms', templateId, { name: cleanName })
+    } catch (e) {
+      return setError((e as Error).message)
+    }
     load()
   }
 
   const deleteTemplate = async (templateId: string) => {
     if (!window.confirm('Delete this template and its mapped fields?')) return
-    const { error } = await supabase.from('forms').delete().eq('id', templateId)
-    if (error) return setError(error.message)
+    try {
+      await api.remove('forms', templateId)
+    } catch (e) {
+      return setError((e as Error).message)
+    }
     load()
   }
 
   const createCustomField = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newFieldLabel.trim()) return
-    const { error } = await supabase.from('project_custom_fields').insert({
-      project_id: projectId,
-      label: newFieldLabel.trim(),
-      type: newFieldType,
-      required: newFieldRequired,
-      show_in_table: newFieldShow,
-      auto_prefix: newFieldType === 'auto_number' ? newFieldPrefix.trim() : null,
-      auto_start: newFieldType === 'auto_number' ? Number(newFieldStart) || 1 : 1,
-      options: isDropdownType(newFieldType) ? optionTextToList(newFieldOptions) : [],
-      sort_order: customFields.length,
-    })
-    if (error) return setError(error.message)
+    try {
+      await api.create('custom-fields', {
+        project_id: projectId,
+        label: newFieldLabel.trim(),
+        type: newFieldType,
+        required: newFieldRequired,
+        show_in_table: newFieldShow,
+        auto_prefix: newFieldType === 'auto_number' ? newFieldPrefix.trim() : null,
+        auto_start: newFieldType === 'auto_number' ? Number(newFieldStart) || 1 : 1,
+        options: isDropdownType(newFieldType) ? optionTextToList(newFieldOptions) : [],
+        sort_order: customFields.length,
+      })
+    } catch (e) {
+      return setError((e as Error).message)
+    }
     setNewFieldLabel('')
     setNewFieldType('text')
     setNewFieldRequired(false)
@@ -154,28 +160,34 @@ export function ProjectDetail() {
 
   const saveFieldEdit = async (fieldId: string) => {
     if (!editFieldLabel.trim()) return
-    const { error } = await supabase.from('project_custom_fields').update({
-      label: editFieldLabel.trim(),
-      type: editFieldType,
-      required: editFieldRequired,
-      show_in_table: editFieldShow,
-      auto_prefix: editFieldType === 'auto_number' ? editFieldPrefix.trim() : null,
-      auto_start: editFieldType === 'auto_number' ? Number(editFieldStart) || 1 : 1,
-      options: isDropdownType(editFieldType) ? optionTextToList(editFieldOptions) : [],
-    }).eq('id', fieldId)
-    if (error) return setError(error.message)
+    try {
+      await api.update('custom-fields', fieldId, {
+        label: editFieldLabel.trim(),
+        type: editFieldType,
+        required: editFieldRequired,
+        show_in_table: editFieldShow,
+        auto_prefix: editFieldType === 'auto_number' ? editFieldPrefix.trim() : null,
+        auto_start: editFieldType === 'auto_number' ? Number(editFieldStart) || 1 : 1,
+        options: isDropdownType(editFieldType) ? optionTextToList(editFieldOptions) : [],
+      })
+    } catch (e) {
+      return setError((e as Error).message)
+    }
     setEditingFieldId(null)
     load()
   }
 
   const deleteCustomField = async (fieldId: string) => {
-    const { error } = await supabase.from('project_custom_fields').delete().eq('id', fieldId)
-    if (error) return setError(error.message)
+    try {
+      await api.remove('custom-fields', fieldId)
+    } catch (e) {
+      return setError((e as Error).message)
+    }
     load()
   }
 
   const toggleFieldVisible = async (field: ProjectCustomField) => {
-    await supabase.from('project_custom_fields').update({ show_in_table: !field.show_in_table }).eq('id', field.id)
+    await api.update('custom-fields', field.id, { show_in_table: !field.show_in_table })
     load()
   }
 
@@ -187,7 +199,7 @@ export function ProjectDetail() {
     const [moved] = next.splice(index, 1)
     next.splice(targetIndex, 0, moved)
     setCustomFields(next.map((field, i) => ({ ...field, sort_order: i })))
-    await Promise.all(next.map((field, i) => supabase.from('project_custom_fields').update({ sort_order: i }).eq('id', field.id)))
+    await Promise.all(next.map((field, i) => api.update('custom-fields', field.id, { sort_order: i })))
     load()
   }
 
@@ -200,19 +212,28 @@ export function ProjectDetail() {
     return next
   }
 
-  const saveValuesForRecord = async (recordId: string, values: Record<string, string>) => {
-    const rows = customFields.map((field) => ({ record_id: recordId, field_id: field.id, value: values[field.id]?.trim() ?? '' })).filter((row) => row.value)
-    if (rows.length) await supabase.from('record_custom_values').upsert(rows, { onConflict: 'record_id,field_id' })
-  }
+  const buildCustomValueRows = (values: Record<string, string>) =>
+    customFields.map((field) => ({ field_id: field.id, value: values[field.id]?.trim() ?? '' })).filter((row) => row.value)
 
   const createRecord = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!template || !template.template_path || missingRequiredCustom) return
+    if (!template || !template.has_template || missingRequiredCustom) return
     if (!isAutoPopulate && (!signerName.trim() || !signerEmail.trim())) return
     const values = withAutoNumbers(customValues)
-    const { data: record, error } = await supabase.from('records').insert({ form_id: template.id, project_id: projectId, signer_name: isAutoPopulate ? 'Auto populate record' : signerName.trim(), signer_email: isAutoPopulate ? 'no-reply@cti.local' : signerEmail.trim(), message: isAutoPopulate ? '' : message.trim(), created_by: session!.user.id }).select('id').single()
-    if (error) return setError(error.message)
-    await saveValuesForRecord(record.id, values)
+    try {
+      await api.create('records', {
+        form_id: template.id,
+        project_id: projectId,
+        signer_name: isAutoPopulate ? 'Auto populate record' : signerName.trim(),
+        signer_email: isAutoPopulate ? 'no-reply@cti.local' : signerEmail.trim(),
+        message: isAutoPopulate ? '' : message.trim(),
+        status: 'draft',
+        values: [],
+        custom_values: buildCustomValueRows(values),
+      })
+    } catch (e) {
+      return setError((e as Error).message)
+    }
     setSignerName('')
     setSignerEmail('')
     setMessage(getAppSettings().defaultSignatureMessage)
@@ -222,15 +243,26 @@ export function ProjectDetail() {
   }
 
   const importRecords = async () => {
-    if (!template || !template.template_path || !importText.trim()) return
+    if (!template || !template.has_template || !importText.trim()) return
     const rows = parseCsv(importText)
     if (!rows.length) return setError('No import rows found.')
-    for (const [index, row] of rows.entries()) {
-      const { data: record, error } = await supabase.from('records').insert({ form_id: template.id, project_id: projectId, signer_name: isAutoPopulate ? 'Auto populate record' : row.signer_name || row.name || '', signer_email: isAutoPopulate ? 'no-reply@cti.local' : row.signer_email || row.email || '', message: isAutoPopulate ? '' : message.trim(), created_by: session!.user.id }).select('id').single()
-      if (error) return setError(error.message)
-      const values: Record<string, string> = {}
-      for (const field of customFields) values[field.id] = row[field.label] ?? row[field.label.toLowerCase()] ?? ''
-      await saveValuesForRecord(record.id, withAutoNumbers(values, index))
+    try {
+      for (const [index, row] of rows.entries()) {
+        const values: Record<string, string> = {}
+        for (const field of customFields) values[field.id] = row[field.label] ?? row[field.label.toLowerCase()] ?? ''
+        await api.create('records', {
+          form_id: template.id,
+          project_id: projectId,
+          signer_name: isAutoPopulate ? 'Auto populate record' : row.signer_name || row.name || '',
+          signer_email: isAutoPopulate ? 'no-reply@cti.local' : row.signer_email || row.email || '',
+          message: isAutoPopulate ? '' : message.trim(),
+          status: 'draft',
+          values: [],
+          custom_values: buildCustomValueRows(withAutoNumbers(values, index)),
+        })
+      }
+    } catch (e) {
+      return setError((e as Error).message)
     }
     setImportText('')
     setPanel(null)
@@ -242,11 +274,10 @@ export function ProjectDetail() {
     if (!ids.length) return
     setError(null)
     for (const id of ids) {
-      const { data, error } = await supabase.functions.invoke('send-signature-request', {
-        body: { recordId: id, appUrl: appBaseUrl() },
-      })
-      if (error || data?.error) {
-        setError(error?.message ?? data.error)
+      try {
+        await api.sendSignatureRequest(id, appBaseUrl())
+      } catch (e) {
+        setError((e as Error).message)
         break
       }
     }
@@ -256,39 +287,41 @@ export function ProjectDetail() {
 
   const deleteRecord = async (recordId: string) => {
     if (!window.confirm('Delete this record and its data? This cannot be undone.')) return
-    await supabase.from('records').delete().eq('id', recordId)
+    await api.remove('records', recordId)
     load()
   }
 
   const markComplete = async (recordId: string) => {
-    await supabase.from('records').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', recordId)
-    const { data, error } = await supabase.functions.invoke('onedrive-connect', { body: { action: 'upload', record_id: recordId } })
-    if (error || data?.error) setError('Saved as completed, but OneDrive upload failed: ' + (error?.message ?? data.error))
+    await api.update('records', recordId, { status: 'completed', completed_at: new Date().toISOString() })
+    try {
+      await api.onedrive({ action: 'upload', record_id: recordId })
+    } catch (e) {
+      setError('Saved as completed, but OneDrive upload failed: ' + (e as Error).message)
+    }
     load()
   }
 
   const downloadAutoPopulatePdf = async (record: SignRecord) => {
-    if (!template?.template_path) return setError('Upload a template PDF first.')
+    if (!template?.has_template) return setError('Upload a template PDF first.')
     setError(null)
-    const [{ data: fields, error: fieldsErr }, { data: file, error: dlErr }] = await Promise.all([
-      supabase.from('form_fields').select('*').eq('form_id', template.id),
-      supabase.storage.from('templates').download(template.template_path),
-    ])
-    if (fieldsErr) return setError(fieldsErr.message)
-    if (dlErr || !file) return setError('Could not load the template PDF: ' + (dlErr?.message ?? 'unknown error'))
-    const formFields = (fields as FormField[]) ?? []
-    const customValues = recordValues[record.id] ?? {}
-    const values = formFields
-      .filter((f) => f.custom_field_id && customValues[f.custom_field_id])
-      .map((f) => ({ id: f.id, record_id: record.id, field_id: f.id, value: customValues[f.custom_field_id!] }))
-    const templateBytes = await file.arrayBuffer()
-    const bytes = await buildSignedPdf(templateBytes, formFields, values)
-    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${(project?.name ?? 'record').replace(/\s+/g, '_')}-${record.id.slice(0, 8)}.pdf`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const { base64 } = await api.getTemplate(template.id)
+      const formFields = template.fields
+      const customVals = record.custom_values
+      const values = formFields
+        .filter((f) => f.custom_field_id && customVals.some((v) => v.field_id === f.custom_field_id && v.value))
+        .map((f) => ({ field_id: f.id, value: customVals.find((v) => v.field_id === f.custom_field_id)!.value }))
+      const templateBytes = base64ToArrayBuffer(base64)
+      const bytes = await buildSignedPdf(templateBytes, formFields, values)
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(project?.name ?? 'record').replace(/\s+/g, '_')}-${record.id.slice(0, 8)}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError((e as Error).message)
+    }
   }
 
   if (loading) return <p className="text-cti-gray">Loading...</p>
@@ -312,11 +345,11 @@ function TemplateTab({ projectId, template, ensureTemplate, renameTemplate, dele
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(template?.name ?? 'Template')
   useEffect(() => setName(template?.name ?? 'Template'), [template?.name])
-  return <div className="space-y-8"><div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]"><section className="space-y-4"><div><h2 className="font-heading text-lg font-bold text-cti-black">Template PDF</h2><p className="mt-1 text-sm text-cti-gray">Upload the PDF and map fields onto it. Define input fields below first so they're available to map.</p></div><div className="card space-y-4 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1">{editing && template ? <div className="flex gap-2"><input className="input" value={name} onChange={(e) => setName(e.target.value)} /><button className="btn-primary" onClick={() => { renameTemplate(template.id, name); setEditing(false) }}>Save</button><button className="btn-ghost" onClick={() => { setName(template.name); setEditing(false) }}>Cancel</button></div> : <><p className="font-semibold text-cti-ink">{template?.name ?? 'Template'}</p><p className="text-sm text-cti-gray">{template?.template_path ? `Template ready - ${template.page_count} page(s)` : 'No PDF uploaded yet'}</p></>}</div>{template ? <Link to={`/forms/${template.id}/edit`} className="btn-primary whitespace-nowrap">Upload & map PDF</Link> : <button className="btn-primary" onClick={ensureTemplate}>Create template</button>}</div>{template && <div className="flex flex-wrap gap-2 border-t border-cti-line pt-3"><button className="btn-ghost px-3 py-2 text-xs" type="button" onClick={() => setEditing(true)}>Edit name</button><Link to={`/forms/${template.id}/edit`} className="btn-ghost px-3 py-2 text-xs">Replace PDF</Link><button className="btn-ghost px-3 py-2 text-xs text-cti-red" type="button" onClick={() => deleteTemplate(template.id)}>Delete template</button></div>}</div></section><OneDriveConnectPanel projectId={projectId} /></div><SettingTab {...fieldsManagerProps} /></div>
+  return <div className="space-y-8"><div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]"><section className="space-y-4"><div><h2 className="font-heading text-lg font-bold text-cti-black">Template PDF</h2><p className="mt-1 text-sm text-cti-gray">Upload the PDF and map fields onto it. Define input fields below first so they're available to map.</p></div><div className="card space-y-4 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1">{editing && template ? <div className="flex gap-2"><input className="input" value={name} onChange={(e) => setName(e.target.value)} /><button className="btn-primary" onClick={() => { renameTemplate(template.id, name); setEditing(false) }}>Save</button><button className="btn-ghost" onClick={() => { setName(template.name); setEditing(false) }}>Cancel</button></div> : <><p className="font-semibold text-cti-ink">{template?.name ?? 'Template'}</p><p className="text-sm text-cti-gray">{template?.has_template ? `Template ready - ${template.page_count} page(s)` : 'No PDF uploaded yet'}</p></>}</div>{template ? <Link to={`/forms/${template.id}/edit`} className="btn-primary whitespace-nowrap">Upload & map PDF</Link> : <button className="btn-primary" onClick={ensureTemplate}>Create template</button>}</div>{template && <div className="flex flex-wrap gap-2 border-t border-cti-line pt-3"><button className="btn-ghost px-3 py-2 text-xs" type="button" onClick={() => setEditing(true)}>Edit name</button><Link to={`/forms/${template.id}/edit`} className="btn-ghost px-3 py-2 text-xs">Replace PDF</Link><button className="btn-ghost px-3 py-2 text-xs text-cti-red" type="button" onClick={() => deleteTemplate(template.id)}>Delete template</button></div>}</div></section><OneDriveConnectPanel projectId={projectId} /></div><SettingTab {...fieldsManagerProps} /></div>
 }
 
 function FormTab(props: { isAutoPopulate: boolean; template?: Form; records: SignRecord[]; visibleFields: ProjectCustomField[]; recordValues: Record<string, Record<string, string>>; selectedRecords: Record<string, boolean>; setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>; massMarkSent: () => void; deleteRecord: (recordId: string) => void; markComplete: (recordId: string) => void; downloadPdf: (record: SignRecord) => void; openPanel: (mode: PanelMode) => void }) {
-  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-heading text-lg font-bold text-cti-black">Records</h2><p className="text-sm text-cti-gray">{props.template?.template_path ? 'Table uses visible columns from the Template tab.' : 'Create and map a template before adding records.'}</p></div><div className="flex gap-2"><button className="btn-ghost" onClick={() => props.openPanel('import')} disabled={!props.template?.template_path}>Import records</button><button className="btn-primary" onClick={() => props.openPanel('add')} disabled={!props.template?.template_path}>+ Add record</button>{!props.isAutoPopulate && <button className="btn-dark" onClick={props.massMarkSent}>Mass send</button>}</div></div><RecordsTable isAutoPopulate={props.isAutoPopulate} records={props.records} fields={props.visibleFields} recordValues={props.recordValues} selectedRecords={props.selectedRecords} setSelectedRecords={props.setSelectedRecords} deleteRecord={props.deleteRecord} markComplete={props.markComplete} downloadPdf={props.downloadPdf} completed={false} /></section>
+  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-heading text-lg font-bold text-cti-black">Records</h2><p className="text-sm text-cti-gray">{props.template?.has_template ? 'Table uses visible columns from the Template tab.' : 'Create and map a template before adding records.'}</p></div><div className="flex gap-2"><button className="btn-ghost" onClick={() => props.openPanel('import')} disabled={!props.template?.has_template}>Import records</button><button className="btn-primary" onClick={() => props.openPanel('add')} disabled={!props.template?.has_template}>+ Add record</button>{!props.isAutoPopulate && <button className="btn-dark" onClick={props.massMarkSent}>Mass send</button>}</div></div><RecordsTable isAutoPopulate={props.isAutoPopulate} records={props.records} fields={props.visibleFields} recordValues={props.recordValues} selectedRecords={props.selectedRecords} setSelectedRecords={props.setSelectedRecords} deleteRecord={props.deleteRecord} markComplete={props.markComplete} downloadPdf={props.downloadPdf} completed={false} /></section>
 }
 
 function CompletedTab({ isAutoPopulate, records, visibleFields, recordValues }: { isAutoPopulate: boolean; records: SignRecord[]; visibleFields: ProjectCustomField[]; recordValues: Record<string, Record<string, string>> }) {
@@ -380,10 +413,9 @@ function fieldSummary(field: ProjectCustomField) {
   return parts.join(' - ')
 }
 
-function groupRecordValues(values: RecordCustomValue[]) {
-  return values.reduce<Record<string, Record<string, string>>>((acc, value) => {
-    if (!acc[value.record_id]) acc[value.record_id] = {}
-    acc[value.record_id][value.field_id] = value.value ?? ''
+function groupRecordValues(records: SignRecord[]) {
+  return records.reduce<Record<string, Record<string, string>>>((acc, record) => {
+    acc[record.id] = Object.fromEntries(record.custom_values.map((v) => [v.field_id, v.value]))
     return acc
   }, {})
 }
@@ -452,4 +484,11 @@ function inputTypeForCustomField(field: ProjectCustomField) {
 
 function appBaseUrl() {
   return `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, '')
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return bytes.buffer
 }

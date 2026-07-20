@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { api } from '../lib/api'
 import type { Project, ProjectType } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 
@@ -11,7 +10,6 @@ const projectTypes: { value: ProjectType; label: string; description: string }[]
 ]
 
 export function Dashboard() {
-  const { session } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -22,12 +20,12 @@ export function Dashboard() {
 
   const load = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) setError(error.message)
-    setProjects(((data as Project[]) ?? []).map((project) => ({ ...project, project_type: project.project_type ?? 'sent_signature' })))
+    try {
+      const data = await api.list<Project>('projects')
+      setProjects(data.map((project) => ({ ...project, project_type: project.project_type ?? 'sent_signature' })).sort((a, b) => b.created_at.localeCompare(a.created_at)))
+    } catch (e) {
+      setError((e as Error).message)
+    }
     setLoading(false)
   }
 
@@ -39,10 +37,11 @@ export function Dashboard() {
     e.preventDefault()
     if (!name.trim()) return
     setError(null)
-    const { error } = await supabase
-      .from('projects')
-      .insert({ name: name.trim(), description: description.trim(), project_type: projectType, owner_id: session!.user.id })
-    if (error) return setError(error.message)
+    try {
+      await api.create('projects', { name: name.trim(), description: description.trim(), project_type: projectType })
+    } catch (e) {
+      return setError((e as Error).message)
+    }
     setName('')
     setDescription('')
     setProjectType('sent_signature')
@@ -122,9 +121,7 @@ export function Dashboard() {
                 </span>
               </div>
               {p.description && <p className="mt-1 text-sm text-cti-gray">{p.description}</p>}
-              <p className="mt-4 text-xs text-cti-gray">
-                {new Date(p.created_at).toLocaleDateString()}
-              </p>
+              <p className="mt-4 text-xs text-cti-gray">{new Date(p.created_at).toLocaleDateString()}</p>
             </Link>
           ))}
         </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 import type { FieldType, Form, FormField, ProjectCustomField, TextAlign } from '../lib/types'
 import { getPageCount, renderPage } from '../lib/pdf'
 import { PageHeader } from '../components/Layout'
@@ -49,24 +49,18 @@ export function FormEditor() {
   const selectedField = selectedIds.length === 1 ? fields.find((field) => field.id === selectedIds[0]) : null
 
   const load = useCallback(async () => {
-    const { data: f } = await supabase.from('forms').select('*').eq('id', formId).single()
-    const loadedForm = f as Form
+    const loadedForm = await api.get<Form>('forms', formId!)
     setForm(loadedForm)
-    const [{ data: flds }, { data: projectFields }] = await Promise.all([
-      supabase.from('form_fields').select('*').eq('form_id', formId).order('sort_order'),
-      supabase.from('project_custom_fields').select('*').eq('project_id', loadedForm.project_id).order('sort_order').order('created_at'),
-    ])
-    setFields(((flds as LocalField[]) ?? []).map(normalizeField))
+    const projectFields = await api.list<ProjectCustomField>('custom-fields', { project_id: loadedForm.project_id })
+    setFields(((loadedForm.fields as LocalField[]) ?? []).map(normalizeField))
     setHistory([])
     setFuture([])
-    setCustomFields((projectFields as ProjectCustomField[]) ?? [])
-    if (loadedForm?.template_path) {
-      const { data: file, error } = await supabase.storage.from('templates').download(loadedForm.template_path)
-      if (!error && file) {
-        const buf = await file.arrayBuffer()
-        setPdfBytes(buf)
-        setPageCount(await getPageCount(buf))
-      }
+    setCustomFields(projectFields.sort((a, b) => a.sort_order - b.sort_order))
+    if (loadedForm.has_template) {
+      const { base64 } = await api.getTemplate(loadedForm.id)
+      const buf = base64ToArrayBuffer(base64)
+      setPdfBytes(buf)
+      setPageCount(await getPageCount(buf))
     }
   }, [formId])
 
@@ -155,10 +149,13 @@ export function FormEditor() {
     setStatus('Uploading template...')
     const buf = await file.arrayBuffer()
     const count = await getPageCount(buf)
-    const path = `${form.id}/${Date.now()}-${file.name}`
-    const { error } = await supabase.storage.from('templates').upload(path, file, { contentType: 'application/pdf', upsert: true })
-    if (error) { setStatus('Upload failed: ' + error.message); setBusy(false); return }
-    await supabase.from('forms').update({ template_path: path, page_count: count }).eq('id', form.id)
+    try {
+      await api.uploadTemplate(form.id, arrayBufferToBase64(buf), count)
+    } catch (e) {
+      setStatus('Upload failed: ' + (e as Error).message)
+      setBusy(false)
+      return
+    }
     setPdfBytes(buf)
     setPageCount(count)
     setStatus('Template uploaded.')
@@ -171,7 +168,7 @@ export function FormEditor() {
   const addField = (page: number, nx: number, ny: number) => {
     const spec = FIELD_TYPES.find((t) => t.type === tool)!
     const id = crypto.randomUUID()
-    const field: LocalField = { id, form_id: formId!, type: tool, label: spec.label, custom_field_id: null, page, x: Math.max(0, Math.min(1 - spec.w, nx - spec.w / 2)), y: Math.max(0, Math.min(1 - spec.h, ny - spec.h / 2)), width: spec.w, height: spec.h, text_align: 'left', font_size: defaultFontSize(tool), required: true, sort_order: fields.length, _new: true }
+    const field: LocalField = { id, type: tool, label: spec.label, custom_field_id: null, page, x: Math.max(0, Math.min(1 - spec.w, nx - spec.w / 2)), y: Math.max(0, Math.min(1 - spec.h, ny - spec.h / 2)), width: spec.w, height: spec.h, text_align: 'left', font_size: defaultFontSize(tool), required: true, sort_order: fields.length, _new: true }
     setFieldsWithHistory((prev) => [...prev, field])
     setSelectedIds([id])
   }
@@ -200,16 +197,13 @@ export function FormEditor() {
     if (!form) return
     setBusy(true)
     setStatus('Saving field mapping...')
-    const rows = fields.map(({ _new, ...f }, i) => ({ ...normalizeField(f), sort_order: i }))
-    if (rows.length) {
-      const { error } = await supabase.from('form_fields').upsert(rows)
-      if (error) { setStatus('Save failed: ' + error.message); setBusy(false); return }
-      const keepIds = rows.map((row) => row.id)
-      const { error: deleteError } = await supabase.from('form_fields').delete().eq('form_id', form.id).not('id', 'in', `(${keepIds.join(',')})`)
-      if (deleteError) { setStatus('Save failed: ' + deleteError.message); setBusy(false); return }
-    } else {
-      const { error } = await supabase.from('form_fields').delete().eq('form_id', form.id)
-      if (error) { setStatus('Save failed: ' + error.message); setBusy(false); return }
+    const rows = fields.map(({ _new, ...f }, i) => ({ ...normalizeField(f as LocalField), sort_order: i }))
+    try {
+      await api.replaceFields(form.id, rows)
+    } catch (e) {
+      setStatus('Save failed: ' + (e as Error).message)
+      setBusy(false)
+      return
     }
     setStatus(`Saved ${fields.length} field(s).`)
     setBusy(false)
@@ -305,3 +299,18 @@ function fieldLabel(type: FieldType) {
 }
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)) }
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return bytes.buffer
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  return btoa(binary)
+}

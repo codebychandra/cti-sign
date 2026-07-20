@@ -133,6 +133,9 @@ async function route(request: Request, url: URL, env: Env): Promise<Response> {
   if (segments[0] === 'forms' && segments.length === 3 && segments[2] === 'fields' && method === 'PUT') {
     return handleReplaceFields(segments[1], request, env)
   }
+  if (segments[0] === 'records' && segments.length === 3 && segments[2] === 'signed-pdf' && method === 'GET') {
+    return handleGetSignedPdf(segments[1], env)
+  }
   if (method === 'POST' && path === 'send-signature-request') return handleSendSignatureRequest(request, env)
   if (method === 'POST' && path === 'onedrive') return handleOneDrive(request, env)
 
@@ -232,6 +235,11 @@ async function handleUploadTemplate(formId: string, request: Request, env: Env):
 async function handleGetTemplate(formId: string, env: Env): Promise<Response> {
   const base64 = await getPdf(env, `template_pdf_${formId}`)
   return base64 ? json({ base64 }) : json({ error: 'No template uploaded' }, 404)
+}
+
+async function handleGetSignedPdf(recordId: string, env: Env): Promise<Response> {
+  const base64 = await getPdf(env, `signed_pdf_${recordId}`)
+  return base64 ? json({ base64 }) : json({ error: 'No signed document found' }, 404)
 }
 
 async function handleReplaceFields(formId: string, request: Request, env: Env): Promise<Response> {

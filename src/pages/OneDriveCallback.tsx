@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 
 export function OneDriveCallback() {
   const [params] = useSearchParams()
@@ -34,16 +34,14 @@ export function OneDriveCallback() {
       }
       setProjectId(saved.projectId)
 
-      const { data, error } = await supabase.functions.invoke('onedrive-connect', {
-        body: { action: 'exchange', project_id: saved.projectId, code, redirect_uri: saved.redirectUri },
-      })
-      if (error || data?.error) {
+      try {
+        const data = await api.onedrive({ action: 'exchange', project_id: saved.projectId, code, redirect_uri: saved.redirectUri })
+        setStatus('done')
+        setMessage(`Connected as ${data.account_email ?? 'your Microsoft account'}. Now choose a folder.`)
+      } catch (e) {
         setStatus('error')
-        setMessage(error?.message ?? data.error)
-        return
+        setMessage((e as Error).message)
       }
-      setStatus('done')
-      setMessage(`Connected as ${data.account_email ?? 'your Microsoft account'}. Now choose a folder.`)
     })()
   }, [params])
 

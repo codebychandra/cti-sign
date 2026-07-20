@@ -9,22 +9,11 @@ export interface Project {
   name: string
   description: string
   project_type: ProjectType
-  owner_id: string
-  created_at: string
-}
-
-export interface Form {
-  id: string
-  project_id: string
-  name: string
-  template_path: string | null
-  page_count: number
   created_at: string
 }
 
 export interface FormField {
   id: string
-  form_id: string
   type: FieldType
   label: string
   custom_field_id: string | null
@@ -39,6 +28,16 @@ export interface FormField {
   sort_order: number
 }
 
+export interface Form {
+  id: string
+  project_id: string
+  name: string
+  page_count: number
+  has_template: boolean
+  fields: FormField[]
+  created_at: string
+}
+
 export interface ProjectCustomField {
   id: string
   project_id: string
@@ -50,7 +49,16 @@ export interface ProjectCustomField {
   auto_start: number | null
   options: string[] | null
   sort_order: number
-  created_at: string
+}
+
+export interface RecordValue {
+  field_id: string
+  value: string
+}
+
+export interface RecordCustomValue {
+  field_id: string
+  value: string
 }
 
 export interface SignRecord {
@@ -61,28 +69,14 @@ export interface SignRecord {
   signer_email: string
   status: RecordStatus
   token: string
-  signed_pdf_path: string | null
-  signed_pdf_data?: string | null
   onedrive_url: string | null
+  onedrive_uploaded_at: string | null
   message: string
   sent_at: string | null
   viewed_at: string | null
-  submitted_at?: string | null
+  submitted_at: string | null
   completed_at: string | null
-  created_by: string | null
   created_at: string
-}
-
-export interface RecordValue {
-  id: string
-  record_id: string
-  field_id: string
-  value: string | null
-}
-
-export interface RecordCustomValue {
-  id: string
-  record_id: string
-  field_id: string
-  value: string | null
+  values: RecordValue[]
+  custom_values: RecordCustomValue[]
 }

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/Layout'
-import { functionsBase, isConfigured } from '../lib/supabase'
 import { defaultSettings, getAppSettings, resetAppSettings, saveAppSettings } from '../lib/settings'
 
 export function Settings() {
@@ -84,16 +83,16 @@ export function Settings() {
           <section className="card p-5">
             <h2 className="font-heading text-base font-bold text-cti-black">App status</h2>
             <dl className="mt-4 space-y-3 text-sm">
-              <StatusRow label="Supabase" value={isConfigured ? 'Configured' : 'Missing env vars'} />
+              <StatusRow label="Backend" value="Cloudflare Worker + KV" />
               <StatusRow label="Base path" value={import.meta.env.BASE_URL} />
-              <StatusRow label="Functions" value={functionsBase || 'Not configured'} />
             </dl>
           </section>
 
           <section className="card p-5 text-sm text-cti-gray">
             <h2 className="font-heading text-base font-bold text-cti-black">Deployment notes</h2>
             <p className="mt-3">
-              Email sender, Supabase service keys, and OneDrive secrets are managed outside the browser in Supabase or deployment secrets.
+              The shared login password and Microsoft Graph (email/OneDrive) secrets are managed as Worker
+              secrets outside the browser, not here.
             </p>
           </section>
         </aside>

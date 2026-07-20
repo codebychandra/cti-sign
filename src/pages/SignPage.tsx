@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import SignatureCanvas from 'react-signature-canvas'
-import { supabase, isConfigured } from '../lib/supabase'
+import { api } from '../lib/api'
 import type { FormField } from '../lib/types'
 import { buildSignedPdf, renderPage } from '../lib/pdf'
 import { Logo } from '../components/Logo'
@@ -9,11 +9,10 @@ import { Logo } from '../components/Logo'
 const RENDER_WIDTH = 720
 
 interface Session {
-  record: { signer_name: string; signer_email: string; message: string; status: string }
-  form: { name: string; page_count: number; template_path?: string }
+  record: { signer_name: string; signer_email: string; message: string; status: string; custom_values: { field_id: string; value: string }[] }
+  form: { name: string; page_count: number }
   fields: FormField[]
-  custom_values?: Record<string, string>
-  templateUrl?: string
+  templateBase64: string
 }
 
 export function SignPage() {
@@ -28,31 +27,21 @@ export function SignPage() {
   const [padFor, setPadFor] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isConfigured) {
-      setError('This signing service is not configured yet.')
-      setLoading(false)
-      return
-    }
     ;(async () => {
       try {
-        const { data, error } = await supabase.rpc('get_signing_session', { p_token: token })
-        if (error) throw new Error(error.message)
-        if (!data || data.error) throw new Error(data?.error || 'Invalid or expired signing link')
-        const s = data as Session
+        const s = (await api.getSigningSession(token!)) as Session
         setSession(s)
         if (s.record.status === 'completed') setDone(true)
         const today = new Date().toISOString().slice(0, 10)
         const seed: Record<string, string> = {}
+        const customValueByField = Object.fromEntries(s.record.custom_values.map((v) => [v.field_id, v.value]))
         for (const f of s.fields) {
-          if (f.custom_field_id && s.custom_values?.[f.custom_field_id]) seed[f.id] = s.custom_values[f.custom_field_id]
+          if (f.custom_field_id && customValueByField[f.custom_field_id]) seed[f.id] = customValueByField[f.custom_field_id]
           else if (f.type === 'date' || f.type === 'signed_date') seed[f.id] = today
           else if (f.type === 'email') seed[f.id] = s.record.signer_email
         }
         setValues(seed)
-        const templateUrl = s.templateUrl || `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/templates/${s.form.template_path}`
-        const tpl = await fetch(templateUrl)
-        if (!tpl.ok) throw new Error('Could not load the document template')
-        setPdfBytes(await tpl.arrayBuffer())
+        setPdfBytes(base64ToArrayBuffer(s.templateBase64))
       } catch (e) {
         setError((e as Error).message)
       } finally {
@@ -71,16 +60,10 @@ export function SignPage() {
     setError(null)
     setSubmitting(true)
     try {
-      const valueRows = session.fields.filter((f) => values[f.id]).map((f) => ({ id: f.id, field_id: f.id, record_id: '', value: values[f.id] }))
-      const signed = await buildSignedPdf(pdfBytes, session.fields, valueRows as any)
+      const valueRows = session.fields.filter((f) => values[f.id]).map((f) => ({ field_id: f.id, value: values[f.id] }))
+      const signed = await buildSignedPdf(pdfBytes, session.fields, valueRows)
       const pdfBase64 = bytesToBase64(signed)
-      const { data, error } = await supabase.rpc('submit_signature', {
-        p_token: token,
-        p_values: session.fields.filter((f) => values[f.id]).map((f) => ({ field_id: f.id, value: values[f.id] })),
-        p_pdf: pdfBase64,
-      })
-      if (error) throw new Error(error.message)
-      if (data?.error) throw new Error(data.error)
+      await api.submitSignature(token!, { values: valueRows, pdfBase64 })
       setDone(true)
     } catch (e) {
       setError((e as Error).message)
@@ -122,3 +105,4 @@ function SignaturePad({ onDone, onCancel }: { onDone: (dataUrl: string) => void;
 
 function Centered({ children }: { children: React.ReactNode }) { return <div className="grid min-h-screen place-items-center bg-cti-bg px-4">{children}</div> }
 function bytesToBase64(bytes: Uint8Array): string { let bin = ''; const chunk = 0x8000; for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk)); return btoa(bin) }
+function base64ToArrayBuffer(base64: string): ArrayBuffer { const bin = atob(base64); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); return bytes.buffer }

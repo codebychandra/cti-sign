@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 
 interface ConnectionInfo {
   folder_id: string | null
@@ -15,12 +15,12 @@ export function OneDriveConnectPanel({ projectId }: { projectId: string }) {
 
   const load = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('onedrive_connections')
-      .select('folder_id, folder_path, account_email')
-      .eq('project_id', projectId)
-      .maybeSingle()
-    setInfo((data as ConnectionInfo) ?? null)
+    try {
+      const data = await api.get<ConnectionInfo>('onedrive-connections', projectId)
+      setInfo(data)
+    } catch {
+      setInfo(null)
+    }
     setLoading(false)
   }
 
@@ -48,11 +48,12 @@ export function OneDriveConnectPanel({ projectId }: { projectId: string }) {
   const disconnect = async () => {
     if (!window.confirm('Disconnect OneDrive from this project?')) return
     setError(null)
-    const { data, error } = await supabase.functions.invoke('onedrive-connect', {
-      body: { action: 'disconnect', project_id: projectId },
-    })
-    if (error || data?.error) return setError(error?.message ?? data.error)
-    load()
+    try {
+      await api.onedrive({ action: 'disconnect', project_id: projectId })
+      load()
+    } catch (e) {
+      setError((e as Error).message)
+    }
   }
 
   if (loading) return null
@@ -107,12 +108,15 @@ function FolderBrowser({ projectId, onClose, onSelected }: { projectId: string; 
     let cancelled = false
     setLoading(true)
     setError(null)
-    supabase.functions
-      .invoke('onedrive-connect', { body: { action: 'list-folders', project_id: projectId, folder_id: current.id ?? undefined } })
-      .then(({ data, error }) => {
+    api.onedrive({ action: 'list-folders', project_id: projectId, folder_id: current.id ?? undefined })
+      .then((data) => {
         if (cancelled) return
-        if (error || data?.error) setError(error?.message ?? data.error)
-        else setFolders(data.folders ?? [])
+        setFolders(data.folders ?? [])
+        setLoading(false)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setError((e as Error).message)
         setLoading(false)
       })
     return () => {
@@ -122,11 +126,12 @@ function FolderBrowser({ projectId, onClose, onSelected }: { projectId: string; 
 
   const selectHere = async () => {
     const path = stack.map((s) => s.name).join('/')
-    const { data, error } = await supabase.functions.invoke('onedrive-connect', {
-      body: { action: 'select-folder', project_id: projectId, folder_id: current.id ?? 'root', folder_path: path },
-    })
-    if (error || data?.error) return setError(error?.message ?? data.error)
-    onSelected()
+    try {
+      await api.onedrive({ action: 'select-folder', project_id: projectId, folder_id: current.id ?? 'root', folder_path: path })
+      onSelected()
+    } catch (e) {
+      setError((e as Error).message)
+    }
   }
 
   return (

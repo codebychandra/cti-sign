@@ -1,13 +1,15 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import type { Session } from '@supabase/supabase-js'
-import { supabase } from './supabase'
+import { api, getToken, setToken } from './api'
+
+interface Session {
+  token: string
+}
 
 interface AuthState {
   session: Session | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>
-  signOut: () => Promise<void>
+  login: (password: string) => Promise<{ error: string | null }>
+  logout: () => void
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined)
@@ -17,31 +19,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setLoading(false)
-    })
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
-    return () => sub.subscription.unsubscribe()
+    const token = getToken()
+    setSession(token ? { token } : null)
+    setLoading(false)
   }, [])
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error: error?.message ?? null }
-  }
-  const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password })
-    return { error: error?.message ?? null }
-  }
-  const signOut = async () => {
-    await supabase.auth.signOut()
+  const login = async (password: string) => {
+    try {
+      const { token } = await api.login(password)
+      setToken(token)
+      setSession({ token })
+      return { error: null }
+    } catch (e) {
+      return { error: (e as Error).message }
+    }
   }
 
-  return (
-    <AuthContext.Provider value={{ session, loading, signIn, signUp, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  const logout = () => {
+    setToken(null)
+    setSession(null)
+  }
+
+  return <AuthContext.Provider value={{ session, loading, login, logout }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

@@ -4,11 +4,11 @@ import { Logo } from './Logo'
 import { useAuth } from '../lib/auth'
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { session, signOut } = useAuth()
+  const { session, logout } = useAuth()
   const navigate = useNavigate()
 
-  const handleSignOut = async () => {
-    await signOut()
+  const handleSignOut = () => {
+    logout()
     navigate('/login')
   }
 
@@ -27,7 +27,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <SidebarItem to="/" icon={<ProjectsIcon />}>Projects</SidebarItem>
             </nav>
             <div className="border-t border-cti-line p-4">
-              <ProfileMenu email={session.user.email ?? 'Signed in'} onSignOut={handleSignOut} />
+              <ProfileMenu email={'CTI Staff'} onSignOut={handleSignOut} />
             </div>
           </>
         )}
@@ -39,7 +39,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to="/" aria-label="CTI eSign home">
               <Logo />
             </Link>
-            {session && <ProfileMenu email={session.user.email ?? 'Signed in'} onSignOut={handleSignOut} compact />}
+            {session && <ProfileMenu email={'CTI Staff'} onSignOut={handleSignOut} compact />}
           </div>
           {session && (
             <nav className="flex gap-2 overflow-x-auto border-t border-cti-line px-4 py-2">

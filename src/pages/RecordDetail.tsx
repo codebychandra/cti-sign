@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 import { buildSignedPdf } from '../lib/pdf'
-import type { Form, FormField, ProjectCustomField, ProjectType, RecordCustomValue, SignRecord } from '../lib/types'
+import type { Form, Project, ProjectCustomField, ProjectType, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
 
@@ -21,32 +21,22 @@ export function RecordDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const load = useCallback(async () => {
-    const { data: r } = await supabase.from('records').select('*').eq('id', recordId).single()
-    setRecord(r as SignRecord)
-    if (r) {
-      const currentRecord = r as SignRecord
-      const [{ data: f }, { data: proj }, { data: fields }, { data: values, error: valuesError }] = await Promise.all([
-        supabase.from('forms').select('*').eq('id', currentRecord.form_id).single(),
-        supabase.from('projects').select('project_type').eq('id', currentRecord.project_id).single(),
-        supabase
-          .from('project_custom_fields')
-          .select('*')
-          .eq('project_id', currentRecord.project_id)
-          .order('sort_order')
-          .order('created_at'),
-        supabase.from('record_custom_values').select('*').eq('record_id', currentRecord.id),
-      ])
-      if (valuesError) setMsg('Run the updated Supabase schema to enable record custom values.')
-      setForm(f as Form)
-      setProjectType((proj as { project_type: ProjectType } | null)?.project_type ?? 'sent_signature')
-      setCustomFields(((fields as ProjectCustomField[]) ?? []).map((field) => ({ ...field, options: normalizeOptions(field.options) })))
-      setCustomValues(
-        ((values as RecordCustomValue[]) ?? []).reduce<Record<string, string>>((acc, value) => {
-          acc[value.field_id] = value.value ?? ''
-          return acc
-        }, {}),
-      )
-    }
+    const r = await api.get<SignRecord>('records', recordId!)
+    setRecord(r)
+    const [f, proj, fields] = await Promise.all([
+      api.get<Form>('forms', r.form_id),
+      api.get<Project>('projects', r.project_id),
+      api.list<ProjectCustomField>('custom-fields', { project_id: r.project_id }),
+    ])
+    setForm(f)
+    setProjectType(proj.project_type ?? 'sent_signature')
+    setCustomFields(fields.map((field) => ({ ...field, options: normalizeOptions(field.options) })).sort((a, b) => a.sort_order - b.sort_order))
+    setCustomValues(
+      r.custom_values.reduce<Record<string, string>>((acc, value) => {
+        acc[value.field_id] = value.value ?? ''
+        return acc
+      }, {}),
+    )
   }, [recordId])
 
   useEffect(() => {
@@ -63,11 +53,12 @@ export function RecordDetail() {
   const markSent = async () => {
     setBusy(true)
     setMsg(null)
-    const { data, error } = await supabase.functions.invoke('send-signature-request', {
-      body: { recordId: record.id, appUrl: appBaseUrl() },
-    })
-    if (error || data?.error) setMsg(error?.message ?? data.error)
-    else setMsg(data?.emailed === false ? 'No email provider configured. The record was marked sent for manual sharing.' : 'Signature email sent to the signer.')
+    try {
+      const data = await api.sendSignatureRequest(record.id, appBaseUrl())
+      setMsg(data.emailed === false ? 'No email provider configured. The record was marked sent for manual sharing.' : 'Signature email sent to the signer.')
+    } catch (e) {
+      setMsg((e as Error).message)
+    }
     setBusy(false)
     load()
   }
@@ -75,9 +66,13 @@ export function RecordDetail() {
   const markComplete = async () => {
     setBusy(true)
     setMsg(null)
-    await supabase.from('records').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', record.id)
-    const { data, error } = await supabase.functions.invoke('onedrive-connect', { body: { action: 'upload', record_id: record.id } })
-    setMsg(error || data?.error ? 'Marked complete, but OneDrive upload failed: ' + (error?.message ?? data.error) : 'Record marked complete.')
+    await api.update('records', record.id, { status: 'completed', completed_at: new Date().toISOString() })
+    try {
+      await api.onedrive({ action: 'upload', record_id: record.id })
+      setMsg('Record marked complete.')
+    } catch (e) {
+      setMsg('Marked complete, but OneDrive upload failed: ' + (e as Error).message)
+    }
     setBusy(false)
     load()
   }
@@ -87,29 +82,32 @@ export function RecordDetail() {
     if (isCompleted) return
     setBusy(true)
     setMsg(null)
-    const rows = customFields.map((field) => ({
-      record_id: record.id,
-      field_id: field.id,
-      value: customValues[field.id]?.trim() ?? '',
-    }))
-    const { error } = await supabase.from('record_custom_values').upsert(rows, { onConflict: 'record_id,field_id' })
+    const rows = customFields.map((field) => ({ field_id: field.id, value: customValues[field.id]?.trim() ?? '' }))
+    try {
+      await api.update('records', record.id, { custom_values: rows })
+      setMsg('Record details saved.')
+    } catch (e) {
+      setMsg((e as Error).message)
+    }
     setBusy(false)
-    if (error) return setMsg(error.message)
-    setMsg('Record details saved.')
     load()
   }
 
   const download = async () => {
-    if (!record.signed_pdf_data) return setMsg('No signed document found.')
-    const bin = atob(record.signed_pdf_data)
-    const bytes = new Uint8Array(bin.length)
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${record.signer_name.replace(/\s+/g, '_')}_signed.pdf`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const { base64 } = await api.getSignedPdf(record.id)
+      const bin = atob(base64)
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${record.signer_name.replace(/\s+/g, '_')}_signed.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setMsg((e as Error).message)
+    }
   }
 
   const copy = async () => {
@@ -120,36 +118,36 @@ export function RecordDetail() {
 
   const deleteRecordNow = async () => {
     setBusy(true)
-    const { error } = await supabase.from('records').delete().eq('id', record.id)
-    if (error) {
+    try {
+      await api.remove('records', record.id)
+    } catch (e) {
       setBusy(false)
-      setMsg(error.message)
+      setMsg((e as Error).message)
       return
     }
     navigate(`/projects/${record.project_id}`)
   }
 
   const downloadAutoPdf = async () => {
-    if (!form?.template_path) return setMsg('Upload a template PDF first.')
+    if (!form?.has_template) return setMsg('Upload a template PDF first.')
     setMsg(null)
-    const [{ data: fields, error: fieldsErr }, { data: file, error: dlErr }] = await Promise.all([
-      supabase.from('form_fields').select('*').eq('form_id', form.id),
-      supabase.storage.from('templates').download(form.template_path),
-    ])
-    if (fieldsErr) return setMsg(fieldsErr.message)
-    if (dlErr || !file) return setMsg('Could not load the template PDF: ' + (dlErr?.message ?? 'unknown error'))
-    const formFields = (fields as FormField[]) ?? []
-    const values = formFields
-      .filter((f) => f.custom_field_id && customValues[f.custom_field_id])
-      .map((f) => ({ id: f.id, record_id: record.id, field_id: f.id, value: customValues[f.custom_field_id!] }))
-    const templateBytes = await file.arrayBuffer()
-    const bytes = await buildSignedPdf(templateBytes, formFields, values)
-    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${record.signer_name.replace(/\s+/g, '_')}-${record.id.slice(0, 8)}.pdf`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const { base64 } = await api.getTemplate(form.id)
+      const formFields = form.fields
+      const values = formFields
+        .filter((f) => f.custom_field_id && customValues[f.custom_field_id])
+        .map((f) => ({ field_id: f.id, value: customValues[f.custom_field_id!] }))
+      const templateBytes = base64ToArrayBuffer(base64)
+      const bytes = await buildSignedPdf(templateBytes, formFields, values)
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${record.signer_name.replace(/\s+/g, '_')}-${record.id.slice(0, 8)}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setMsg((e as Error).message)
+    }
   }
 
   return (
@@ -324,4 +322,11 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function appBaseUrl() {
   return `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, '')
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return bytes.buffer
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import type { FieldType, Form, FormField, ProjectCustomField, TextAlign } from '../lib/types'
-import { getPageCount, renderPage } from '../lib/pdf'
+import { detectFormFields, getPageCount, renderPage, type DetectedField } from '../lib/pdf'
 import { PageHeader } from '../components/Layout'
 
 const RENDER_WIDTH = 720
@@ -31,6 +31,25 @@ function normalizeField(field: LocalField): LocalField {
   return { ...field, custom_field_id: field.custom_field_id ?? null, text_align: align, font_size: field.font_size ?? defaultFontSize(field.type) }
 }
 
+function detectedToLocalFields(detected: DetectedField[], startIndex: number): LocalField[] {
+  return detected.map((d, i) => ({
+    id: crypto.randomUUID(),
+    type: d.type,
+    label: d.name || `Field ${startIndex + i + 1}`,
+    custom_field_id: null,
+    page: d.page,
+    x: clamp(d.x, 0, 1 - d.width),
+    y: clamp(d.y, 0, 1 - d.height),
+    width: Math.max(0.03, d.width),
+    height: Math.max(0.02, d.height),
+    text_align: 'left',
+    font_size: defaultFontSize(d.type),
+    required: true,
+    sort_order: startIndex + i,
+    _new: true,
+  }))
+}
+
 export function FormEditor() {
   const { formId } = useParams()
   const [form, setForm] = useState<Form | null>(null)
@@ -46,6 +65,7 @@ export function FormEditor() {
   const [preview, setPreview] = useState(false)
   const [status, setStatus] = useState<string>('')
   const [busy, setBusy] = useState(false)
+  const [detectedFields, setDetectedFields] = useState<DetectedField[]>([])
   const selectedField = selectedIds.length === 1 ? fields.find((field) => field.id === selectedIds[0]) : null
 
   const load = useCallback(async () => {
@@ -158,9 +178,31 @@ export function FormEditor() {
     }
     setPdfBytes(buf)
     setPageCount(count)
-    setStatus('Template uploaded.')
+
+    let detected: DetectedField[] = []
+    try {
+      detected = await detectFormFields(buf)
+    } catch {
+      detected = []
+    }
+
+    if (!detected.length) {
+      setStatus('Template uploaded. No fillable fields detected — place fields manually.')
+    } else if (fields.length === 0) {
+      setFieldsWithHistory(() => detectedToLocalFields(detected, 0))
+      setStatus(`Template uploaded. Detected and added ${detected.length} fillable field(s) — review each one's type and mapping.`)
+    } else {
+      setDetectedFields(detected)
+      setStatus(`Template uploaded. Detected ${detected.length} fillable field(s) — click "Insert detected fields" to add them (existing fields kept as-is).`)
+    }
     setBusy(false)
     load()
+  }
+
+  const insertDetectedFields = () => {
+    if (!detectedFields.length) return
+    setFieldsWithHistory((prev) => [...prev, ...detectedToLocalFields(detectedFields, prev.length)])
+    setDetectedFields([])
   }
 
   const selectField = (id: string, additive = false) => setSelectedIds((prev) => !additive ? [id] : prev.includes(id) ? prev.filter((selectedId) => selectedId !== id) : [...prev, id])
@@ -222,6 +264,7 @@ export function FormEditor() {
           <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Edit</p><div className="grid grid-cols-2 gap-2"><button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={undo} disabled={!history.length}>Undo</button><button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={redo} disabled={!future.length}>Redo</button><button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={copyFields} disabled={!selectedIds.length}>Copy</button><button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={pasteFields} disabled={!copiedFields.length}>Paste</button></div></div>
           <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Field to place</p><div className="grid grid-cols-2 gap-2">{FIELD_TYPES.map((t) => <button key={t.type} onClick={() => setTool(t.type)} disabled={preview} className={`btn text-xs ${tool === t.type ? 'bg-cti-red text-white' : 'border border-cti-line bg-white text-cti-ink hover:bg-cti-bg'}`}>{t.label}</button>)}</div><p className="mt-3 text-xs text-cti-gray">Use Text/Date/Number/Email/Text area fields for mapped record columns.</p></div>
           <label className="btn-ghost mt-4 w-full cursor-pointer text-xs">Replace template PDF<input type="file" accept="application/pdf" className="hidden" onChange={onUpload} /></label>
+          {detectedFields.length > 0 && <button type="button" className="btn-primary mt-2 w-full text-xs" onClick={insertDetectedFields}>Insert {detectedFields.length} detected field(s)</button>}
           {selectedField && !preview && <FieldInspector field={selectedField} customFields={customFields} onChange={(p) => updateField(selectedField.id, p)} onDelete={() => removeField(selectedField.id)} />}
           {selectedIds.length > 1 && !preview && <MultiFieldInspector count={selectedIds.length} onAlign={alignSelectedFields} onVerticalAlign={verticalAlignSelectedFields} onFullWidth={fullWidthSelectedFields} onDelete={removeSelectedFields} />}
           {status && <p className="mt-3 text-xs text-cti-gray">{status}</p>}

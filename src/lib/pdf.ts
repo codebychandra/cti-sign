@@ -1,6 +1,6 @@
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFRadioGroup, PDFDropdown, PDFOptionList } from 'pdf-lib'
 import type { FormField, RecordValue } from './types'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
@@ -73,6 +73,66 @@ export async function buildSignedPdf(templateBytes: ArrayBuffer, fields: FormFie
   }
 
   return pdf.save()
+}
+
+export interface DetectedField {
+  name: string
+  type: 'text' | 'textarea' | 'signature'
+  page: number
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * Read a fillable PDF's own AcroForm fields (name + position + rough type) so
+ * they can be dropped straight onto the mapper instead of drawn by hand.
+ * Position/type are a starting point — the user still confirms/adjusts each
+ * one (especially which project custom field it maps to) in the mapper.
+ */
+export async function detectFormFields(templateBytes: ArrayBuffer): Promise<DetectedField[]> {
+  const pdf = await PDFDocument.load(templateBytes)
+  const pages = pdf.getPages()
+
+  let form
+  try {
+    form = pdf.getForm()
+  } catch {
+    return []
+  }
+
+  const results: DetectedField[] = []
+  for (const field of form.getFields()) {
+    const name = field.getName()
+    let type: DetectedField['type'] = 'text'
+    if (field instanceof PDFTextField) type = field.isMultiline() ? 'textarea' : 'text'
+    else if (field instanceof PDFCheckBox || field instanceof PDFRadioGroup || field instanceof PDFDropdown || field instanceof PDFOptionList) type = 'text'
+    if (/sign(ature)?$/i.test(name)) type = 'signature'
+
+    // acroField/getWidgets aren't part of pdf-lib's public .d.ts surface but
+    // do exist at runtime — this is the standard (if unofficial) way to read
+    // each field's on-page rectangle.
+    const widgets: any[] = (field as any).acroField?.getWidgets?.() ?? []
+    for (const widget of widgets) {
+      const rect = widget.getRectangle()
+      const pageRef = widget.P?.()
+      const pageIndex = pageRef ? pages.findIndex((p) => p.ref.toString() === pageRef.toString()) : 0
+      const page = pages[pageIndex >= 0 ? pageIndex : 0]
+      const pw = page.getWidth()
+      const ph = page.getHeight()
+      results.push({
+        name,
+        type,
+        page: pageIndex >= 0 ? pageIndex : 0,
+        x: rect.x / pw,
+        y: 1 - (rect.y + rect.height) / ph,
+        width: rect.width / pw,
+        height: rect.height / ph,
+      })
+    }
+  }
+  return results
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {

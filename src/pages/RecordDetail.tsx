@@ -1,27 +1,33 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { Form, ProjectCustomField, RecordCustomValue, SignRecord } from '../lib/types'
+import { buildSignedPdf } from '../lib/pdf'
+import type { Form, FormField, ProjectCustomField, ProjectType, RecordCustomValue, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
 
 export function RecordDetail() {
   const { recordId } = useParams()
+  const navigate = useNavigate()
   const [record, setRecord] = useState<SignRecord | null>(null)
   const [form, setForm] = useState<Form | null>(null)
+  const [projectType, setProjectType] = useState<ProjectType>('sent_signature')
   const [customFields, setCustomFields] = useState<ProjectCustomField[]>([])
   const [customValues, setCustomValues] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showTimeline, setShowTimeline] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const load = useCallback(async () => {
     const { data: r } = await supabase.from('records').select('*').eq('id', recordId).single()
     setRecord(r as SignRecord)
     if (r) {
       const currentRecord = r as SignRecord
-      const [{ data: f }, { data: fields }, { data: values, error: valuesError }] = await Promise.all([
+      const [{ data: f }, { data: proj }, { data: fields }, { data: values, error: valuesError }] = await Promise.all([
         supabase.from('forms').select('*').eq('id', currentRecord.form_id).single(),
+        supabase.from('projects').select('project_type').eq('id', currentRecord.project_id).single(),
         supabase
           .from('project_custom_fields')
           .select('*')
@@ -32,6 +38,7 @@ export function RecordDetail() {
       ])
       if (valuesError) setMsg('Run the updated Supabase schema to enable record custom values.')
       setForm(f as Form)
+      setProjectType((proj as { project_type: ProjectType } | null)?.project_type ?? 'sent_signature')
       setCustomFields(((fields as ProjectCustomField[]) ?? []).map((field) => ({ ...field, options: normalizeOptions(field.options) })))
       setCustomValues(
         ((values as RecordCustomValue[]) ?? []).reduce<Record<string, string>>((acc, value) => {
@@ -51,6 +58,7 @@ export function RecordDetail() {
   const signUrl = `${window.location.origin}${import.meta.env.BASE_URL}sign/${record.token}`
   const isCompleted = record.status === 'completed'
   const isSubmitted = record.status === 'submitted'
+  const isAutoPopulate = projectType === 'auto_populate'
 
   const markSent = async () => {
     setBusy(true)
@@ -109,6 +117,40 @@ export function RecordDetail() {
     setTimeout(() => setCopied(false), 1500)
   }
 
+  const deleteRecordNow = async () => {
+    setBusy(true)
+    const { error } = await supabase.from('records').delete().eq('id', record.id)
+    if (error) {
+      setBusy(false)
+      setMsg(error.message)
+      return
+    }
+    navigate(`/projects/${record.project_id}`)
+  }
+
+  const downloadAutoPdf = async () => {
+    if (!form?.template_path) return setMsg('Upload a template PDF first.')
+    setMsg(null)
+    const [{ data: fields, error: fieldsErr }, { data: file, error: dlErr }] = await Promise.all([
+      supabase.from('form_fields').select('*').eq('form_id', form.id),
+      supabase.storage.from('templates').download(form.template_path),
+    ])
+    if (fieldsErr) return setMsg(fieldsErr.message)
+    if (dlErr || !file) return setMsg('Could not load the template PDF: ' + (dlErr?.message ?? 'unknown error'))
+    const formFields = (fields as FormField[]) ?? []
+    const values = formFields
+      .filter((f) => f.custom_field_id && customValues[f.custom_field_id])
+      .map((f) => ({ id: f.id, record_id: record.id, field_id: f.id, value: customValues[f.custom_field_id!] }))
+    const templateBytes = await file.arrayBuffer()
+    const bytes = await buildSignedPdf(templateBytes, formFields, values)
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${record.signer_name.replace(/\s+/g, '_')}-${record.id.slice(0, 8)}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       <PageHeader
@@ -129,8 +171,20 @@ export function RecordDetail() {
         </div>
 
         <div className="card space-y-4 p-6">
-          <h3 className="font-heading font-bold text-cti-black">Actions</h3>
-          {(isCompleted || isSubmitted) ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-heading font-bold text-cti-black">Actions</h3>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-ghost px-3 py-1.5 text-xs" type="button" onClick={() => setShowTimeline((v) => !v)}>Timeline</button>
+              {!isAutoPopulate && <a href={signUrl} target="_blank" rel="noreferrer" className="btn-ghost px-3 py-1.5 text-xs">Letter</a>}
+              <button className="btn-ghost px-3 py-1.5 text-xs text-cti-red" type="button" onClick={() => setConfirmDelete(true)}>Delete</button>
+            </div>
+          </div>
+
+          {showTimeline && <Timeline record={record} />}
+
+          {isAutoPopulate ? (
+            <button className="btn-primary w-full" onClick={downloadAutoPdf}>Download PDF</button>
+          ) : (isCompleted || isSubmitted) ? (
             <>
               <button className="btn-primary w-full" onClick={download}>Download signed PDF</button>
               {isSubmitted && <button className="btn-dark w-full" onClick={markComplete} disabled={busy}>{busy ? 'Saving...' : 'Mark complete'}</button>}
@@ -146,12 +200,27 @@ export function RecordDetail() {
                 </div>
                 <p className="mt-1 text-xs text-cti-gray">Paste it into an email to {record.signer_email}.</p>
               </div>
-              {record.status === 'draft' && <button className="btn-primary w-full" onClick={markSent} disabled={busy}>{busy ? 'Saving...' : 'Mark as sent'}</button>}
+              <button className="btn-primary w-full" onClick={markSent} disabled={busy}>
+                {busy ? 'Sending...' : record.status === 'draft' ? 'Send for signature' : 'Send reminder'}
+              </button>
             </>
           )}
           {msg && <p className="text-sm text-cti-ink">{msg}</p>}
         </div>
       </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+          <div className="card w-full max-w-sm space-y-4 p-5">
+            <h4 className="font-heading font-bold text-cti-black">Delete this record?</h4>
+            <p className="text-sm text-cti-gray">This permanently removes the record and its data. This action cannot be undone.</p>
+            <div className="flex justify-end gap-2">
+              <button className="btn-ghost" type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
+              <button className="btn-primary" type="button" onClick={deleteRecordNow} disabled={busy}>{busy ? 'Deleting...' : 'Yes, delete'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="mt-6">
         <form onSubmit={saveCustomValues} className="card space-y-4 p-6">
@@ -216,6 +285,31 @@ function toggleMultiValue(current: string | undefined, option: string, checked: 
   if (checked) values.add(option)
   else values.delete(option)
   return Array.from(values).join(', ')
+}
+
+function Timeline({ record }: { record: SignRecord }) {
+  const steps = [
+    { label: 'Created', at: record.created_at },
+    { label: 'Sent', at: record.sent_at },
+    { label: 'Viewed', at: record.viewed_at },
+    { label: 'Submitted', at: record.submitted_at },
+    { label: 'Completed', at: record.completed_at },
+  ].filter((step): step is { label: string; at: string } => Boolean(step.at))
+
+  return (
+    <div className="rounded-md border border-cti-line bg-cti-bg p-4">
+      <ol className="space-y-3 border-l-2 border-cti-line pl-4">
+        {steps.map((step) => (
+          <li key={step.label} className="relative text-sm">
+            <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-cti-red" />
+            <p className="font-semibold text-cti-ink">{step.label}</p>
+            <p className="text-xs text-cti-gray">{new Date(step.at).toLocaleString()}</p>
+          </li>
+        ))}
+        {steps.length <= 1 && <li className="text-xs text-cti-gray">No further activity yet.</li>}
+      </ol>
+    </div>
+  )
 }
 
 function Row({ label, value }: { label: string; value: string }) {

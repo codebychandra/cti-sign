@@ -671,7 +671,7 @@ function TimelineButton({ record, open, onToggle }: { record: SignRecord; open: 
 
   return (
     <>
-      <button ref={buttonRef} type="button" title="Timeline" aria-label="Timeline" onClick={onToggle} className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-colors ${rowActionTones.timeline}`}>
+      <button ref={buttonRef} type="button" title="Timeline" aria-label="Timeline" onClick={onToggle} className={`grid h-7 w-7 shrink-0 place-items-center rounded-md border transition-colors ${rowActionTones.timeline}`}>
         <ClockIcon />
       </button>
       {open && position && createPortal(
@@ -730,7 +730,7 @@ const rowActionTones = {
 } as const
 
 function RowActionIcon({ label, onClick, disabled, tone, children }: { label: string; onClick: () => void; disabled?: boolean; tone: keyof typeof rowActionTones; children: React.ReactNode }) {
-  return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${rowActionTones[tone]}`}>{children}</button>
+  return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={`grid h-7 w-7 shrink-0 place-items-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${rowActionTones[tone]}`}>{children}</button>
 }
 
 function SendIcon() {

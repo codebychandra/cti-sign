@@ -111,6 +111,22 @@ export function ProjectDetail() {
     load()
   }
 
+  const deleteProjectCascade = async () => {
+    if (!projectId) return
+    if (!window.confirm(`Delete "${project?.name}" and everything in it — templates, custom fields, and all ${records.length} record(s)? This cannot be undone.`)) return
+    try {
+      await Promise.all(records.map((r) => api.remove('records', r.id)))
+      await Promise.all(forms.map((f) => api.remove('forms', f.id)))
+      await Promise.all(customFields.map((f) => api.remove('custom-fields', f.id)))
+      await api.remove('onedrive-connections', projectId)
+      await api.remove('projects', projectId)
+    } catch (e) {
+      setError((e as Error).message)
+      return
+    }
+    navigate('/')
+  }
+
   const renameTemplate = async (templateId: string, name: string) => {
     const cleanName = name.trim()
     if (!cleanName) return
@@ -434,7 +450,7 @@ export function ProjectDetail() {
       {activeTab === 'template' && <TemplateTab projectId={projectId!} template={template} customFields={customFields} ensureTemplate={ensureTemplate} renameTemplate={renameTemplate} deleteTemplate={deleteTemplate} fieldsManagerProps={{ customFields, newFieldLabel, setNewFieldLabel, newFieldType, setNewFieldType, newFieldRequired, setNewFieldRequired, newFieldShow, setNewFieldShow, newFieldPrefix, setNewFieldPrefix, newFieldStart, setNewFieldStart, newFieldOptions, setNewFieldOptions, editingFieldId, editFieldLabel, setEditFieldLabel, editFieldType, setEditFieldType, editFieldRequired, setEditFieldRequired, editFieldShow, setEditFieldShow, editFieldPrefix, setEditFieldPrefix, editFieldStart, setEditFieldStart, editFieldOptions, setEditFieldOptions, createCustomField, beginEditField, saveFieldEdit, cancelFieldEdit: () => setEditingFieldId(null), deleteCustomField, toggleFieldVisible, moveCustomField }} />}
       {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} markSubmitted={markSubmitted} sendOne={sendOne} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} openPanel={openPanel} />}
       {activeTab === 'completed' && <CompletedTab isAutoPopulate={isAutoPopulate} records={completedRecords} visibleFields={visibleFields} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} />}
-      {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} project={project} updateProject={updateProject} />}
+      {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} project={project} updateProject={updateProject} deleteProject={deleteProjectCascade} />}
       {panel === 'add' && <RecordPanel title="Add Record" onClose={() => setPanel(null)}><RecordForm isAutoPopulate={isAutoPopulate} template={template} signerName={signerName} setSignerName={setSignerName} signerEmail={signerEmail} setSignerEmail={setSignerEmail} message={message} setMessage={setMessage} customFields={customFields} customValues={customValues} setCustomValues={setCustomValues} createRecord={createRecord} /></RecordPanel>}
       {panel === 'import' && <RecordPanel title="Import Records" onClose={() => setPanel(null)}><ImportPanel importText={importText} setImportText={setImportText} importRecords={importRecords} isAutoPopulate={isAutoPopulate} /></RecordPanel>}
     </>
@@ -453,7 +469,7 @@ const projectTypeOptions: { value: Project['project_type']; label: string; descr
   { value: 'auto_populate', label: 'Auto Populate', description: 'Map PDF templates and generate documents from record values only.' },
 ]
 
-function ProjectSettingTab({ projectId, project, updateProject }: { projectId: string; project: Project | null; updateProject: (patch: { name: string; description: string; project_type: Project['project_type']; message_template: string }) => Promise<void> }) {
+function ProjectSettingTab({ projectId, project, updateProject, deleteProject }: { projectId: string; project: Project | null; updateProject: (patch: { name: string; description: string; project_type: Project['project_type']; message_template: string }) => Promise<void>; deleteProject: () => void }) {
   const [name, setName] = useState(project?.name ?? '')
   const [description, setDescription] = useState(project?.description ?? '')
   const [projectType, setProjectType] = useState<Project['project_type']>(project?.project_type ?? 'sent_signature')
@@ -520,6 +536,12 @@ function ProjectSettingTab({ projectId, project, updateProject }: { projectId: s
       </form>
 
       <OneDriveConnectPanel projectId={projectId} />
+
+      <div className="card space-y-3 border-cti-red/30 p-5">
+        <h2 className="font-heading text-base font-bold text-cti-red">Danger Zone</h2>
+        <p className="text-sm text-cti-gray">Permanently delete this project, its template, custom fields, and every record. This cannot be undone.</p>
+        <button type="button" className="btn-ghost w-full text-cti-red" onClick={deleteProject}>Delete Project</button>
+      </div>
     </div>
   )
 }

@@ -5,7 +5,6 @@ import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDetail } from './pages/ProjectDetail'
 import { FormEditor } from './pages/FormEditor'
-import { RecordDetail } from './pages/RecordDetail'
 import { Settings } from './pages/Settings'
 import { SignPage } from './pages/SignPage'
 import { OneDriveCallback } from './pages/OneDriveCallback'
@@ -55,16 +54,6 @@ export default function App() {
           <Protected>
             <Layout>
               <FormEditor />
-            </Layout>
-          </Protected>
-        }
-      />
-      <Route
-        path="/records/:recordId"
-        element={
-          <Protected>
-            <Layout>
-              <RecordDetail />
             </Layout>
           </Protected>
         }

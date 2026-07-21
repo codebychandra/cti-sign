@@ -348,6 +348,13 @@ export function ProjectDetail() {
     } catch (e) {
       setError('Saved as completed, but OneDrive upload failed: ' + (e as Error).message)
     }
+    if (!isAutoPopulate) {
+      try {
+        await api.sendCompletionEmail(recordId)
+      } catch (e) {
+        setError('Saved as completed, but the confirmation email failed to send: ' + (e as Error).message)
+      }
+    }
     load()
   }
 

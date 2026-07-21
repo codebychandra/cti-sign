@@ -4,6 +4,7 @@ import {
   isGraphEmailConfigured,
   sendMailViaGraph,
   signatureEmailHtml,
+  completedEmailHtml,
   exchangeAuthCode,
   getValidAccessToken,
   listGraphFolders,
@@ -137,6 +138,7 @@ async function route(request: Request, url: URL, env: Env): Promise<Response> {
     return handleGetSignedPdf(segments[1], env)
   }
   if (method === 'POST' && path === 'send-signature-request') return handleSendSignatureRequest(request, env)
+  if (method === 'POST' && path === 'send-completion-email') return handleSendCompletionEmail(request, env)
   if (method === 'POST' && path === 'onedrive') return handleOneDrive(request, env)
 
   // --- Generic collection CRUD ---------------------------------------------
@@ -317,6 +319,14 @@ async function handleSubmitSignature(token: string, request: Request, env: Env):
 
 // --- Email ---------------------------------------------------------------------
 
+async function recordDetails(env: Env, record: SignRecord): Promise<{ label: string; value: string }[]> {
+  const customFields = await getCollection<ProjectCustomField>(env, 'project_custom_fields')
+  const projectFields = customFields.filter((f) => f.project_id === record.project_id && f.show_in_table).sort((a, b) => a.sort_order - b.sort_order)
+  return projectFields
+    .map((field) => ({ label: field.label, value: record.custom_values.find((v) => v.field_id === field.id)?.value ?? '' }))
+    .filter((d) => d.value)
+}
+
 async function handleSendSignatureRequest(request: Request, env: Env): Promise<Response> {
   const body = (await request.json()) as { recordId?: string; appUrl?: string }
   if (!body.recordId || !body.appUrl) return json({ error: 'Missing recordId or appUrl' }, 400)
@@ -330,7 +340,8 @@ async function handleSendSignatureRequest(request: Request, env: Env): Promise<R
   const link = `${body.appUrl}/sign/${record.token}`
 
   if (isGraphEmailConfigured(env)) {
-    const result = await sendMailViaGraph(env, record.signer_email, `Signature requested: ${docName}`, signatureEmailHtml(record.signer_name, docName, record.message, link))
+    const details = await recordDetails(env, record)
+    const result = await sendMailViaGraph(env, record.signer_email, `${docName} – ${record.signer_name} | CTI Group`, signatureEmailHtml(record.signer_name, docName, record.message, link, details))
     if (!result.ok) return json({ error: 'Microsoft email error: ' + result.error }, 502)
     await markSent(env, record.id)
     return json({ ok: true, emailed: true, provider: 'microsoft-graph' })
@@ -338,6 +349,32 @@ async function handleSendSignatureRequest(request: Request, env: Env): Promise<R
 
   await markSent(env, record.id)
   return json({ ok: true, emailed: false, note: 'No email provider configured; link marked sent for manual sharing.', link })
+}
+
+async function handleSendCompletionEmail(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { recordId?: string }
+  if (!body.recordId) return json({ error: 'Missing recordId' }, 400)
+
+  const records = await getCollection<SignRecord>(env, 'records')
+  const record = records.find((r) => r.id === body.recordId)
+  if (!record) return json({ error: 'Record not found' }, 404)
+  if (!isGraphEmailConfigured(env)) return json({ ok: true, emailed: false, note: 'No email provider configured.' })
+
+  const forms = await getCollection<Form>(env, 'forms')
+  const docName = forms.find((f) => f.id === record.form_id)?.name ?? 'Document'
+  const signedPdfBase64 = await getPdf(env, `signed_pdf_${record.id}`)
+  if (!signedPdfBase64) return json({ error: 'No signed document found for this record.' }, 404)
+
+  const details = await recordDetails(env, record)
+  const result = await sendMailViaGraph(
+    env,
+    record.signer_email,
+    `Your Signed ${docName} – ${record.signer_name} | CTI Group`,
+    completedEmailHtml(record.signer_name, docName, details),
+    { name: `${docName.replace(/\s+/g, '_')}_signed.pdf`, contentType: 'application/pdf', contentBase64: signedPdfBase64 },
+  )
+  if (!result.ok) return json({ error: 'Microsoft email error: ' + result.error }, 502)
+  return json({ ok: true, emailed: true, provider: 'microsoft-graph' })
 }
 
 async function markSent(env: Env, recordId: string): Promise<void> {

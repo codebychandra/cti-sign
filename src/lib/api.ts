@@ -58,6 +58,8 @@ export const api = {
 
   sendSignatureRequest: (recordId: string, appUrl: string): Promise<{ ok: true; emailed: boolean; note?: string }> =>
     request('/send-signature-request', { method: 'POST', body: JSON.stringify({ recordId, appUrl }) }),
+  sendCompletionEmail: (recordId: string): Promise<{ ok: true; emailed: boolean; note?: string }> =>
+    request('/send-completion-email', { method: 'POST', body: JSON.stringify({ recordId }) }),
   onedrive: (body: Record<string, unknown>): Promise<any> =>
     request('/onedrive', { method: 'POST', body: JSON.stringify(body) }),
 

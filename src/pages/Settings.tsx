@@ -45,16 +45,16 @@ export function Settings() {
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="Your profile and app configuration" />
+      <PageHeader title="Settings" subtitle="Your Profile and App Configuration" />
 
       <div className="max-w-2xl space-y-6">
         <form onSubmit={saveProfile} className="card space-y-5 p-6">
           <div>
-            <h2 className="font-heading text-base font-bold text-cti-black">Your profile</h2>
-            <p className="mt-1 text-sm text-cti-gray">Shown as "Signed in as" in the profile menu.</p>
+            <h2 className="font-heading text-base font-bold text-cti-black">Your Profile</h2>
+            <p className="mt-1 text-sm text-cti-gray">Shown as "Signed in As" in the profile menu.</p>
           </div>
           <div>
-            <label className="label">Display name</label>
+            <label className="label">Display Name</label>
             <input
               className="input"
               value={displayName}
@@ -63,17 +63,17 @@ export function Settings() {
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button className="btn-primary">Save profile</button>
+            <button className="btn-primary">Save Profile</button>
             {profileSaved && <span className="text-sm font-semibold text-cti-ink">Saved</span>}
           </div>
         </form>
 
         <form onSubmit={save} className="card space-y-5 p-6">
           <div>
-            <h2 className="font-heading text-base font-bold text-cti-black">App configuration</h2>
+            <h2 className="font-heading text-base font-bold text-cti-black">App Configuration</h2>
           </div>
           <div>
-            <label className="label">Organization name</label>
+            <label className="label">Organization Name</label>
             <input
               className="input"
               value={organizationName}
@@ -83,7 +83,7 @@ export function Settings() {
           </div>
 
           <div>
-            <label className="label">Support email</label>
+            <label className="label">Support Email</label>
             <input
               className="input"
               type="email"
@@ -94,7 +94,7 @@ export function Settings() {
           </div>
 
           <div>
-            <label className="label">Default signature request message</label>
+            <label className="label">Default Signature Request Message</label>
             <textarea
               className="input min-h-28"
               value={defaultSignatureMessage}
@@ -106,9 +106,9 @@ export function Settings() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button className="btn-primary">Save settings</button>
+            <button className="btn-primary">Save Settings</button>
             <button type="button" className="btn-ghost" onClick={reset}>
-              Reset defaults
+              Reset Defaults
             </button>
             {saved && <span className="text-sm font-semibold text-cti-ink">Saved</span>}
           </div>

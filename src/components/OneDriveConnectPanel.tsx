@@ -73,11 +73,11 @@ export function OneDriveConnectPanel({ projectId }: { projectId: string }) {
             Connected as <span className="font-semibold">{info.account_email ?? 'unknown account'}</span>
           </p>
           <p className="text-sm text-cti-gray">
-            Folder: {info.folder_path ? <span className="font-semibold text-cti-ink">{info.folder_path}</span> : <span className="italic">not selected</span>}
+            Folder: {info.folder_path ? <span className="font-semibold text-cti-ink">{info.folder_path}</span> : <span className="italic">Not Selected</span>}
           </p>
           <div className="flex gap-2">
             <button className="btn-ghost flex-1" type="button" onClick={() => setBrowsing(true)}>
-              {info.folder_path ? 'Change folder' : 'Choose folder'}
+              {info.folder_path ? 'Change Folder' : 'Choose Folder'}
             </button>
             <button className="btn-ghost text-cti-red" type="button" onClick={disconnect}>Disconnect</button>
           </div>
@@ -138,7 +138,7 @@ function FolderBrowser({ projectId, onClose, onSelected }: { projectId: string; 
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
       <div className="card w-full max-w-md space-y-3 p-5">
         <div className="flex items-center justify-between">
-          <h3 className="font-heading font-bold text-cti-black">Choose a folder</h3>
+          <h3 className="font-heading font-bold text-cti-black">Choose a Folder</h3>
           <button className="btn-ghost px-2 py-1 text-xs" type="button" onClick={onClose}>Close</button>
         </div>
         <p className="truncate text-xs text-cti-gray">{stack.map((s) => s.name).join(' / ')}</p>
@@ -146,13 +146,13 @@ function FolderBrowser({ projectId, onClose, onSelected }: { projectId: string; 
         <div className="max-h-64 space-y-1 overflow-auto">
           {stack.length > 1 && (
             <button className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-cti-bg" type="button" onClick={() => setStack((s) => s.slice(0, -1))}>
-              .. Up one level
+              .. Up One Level
             </button>
           )}
           {loading ? (
             <p className="p-3 text-sm text-cti-gray">Loading...</p>
           ) : folders.length === 0 ? (
-            <p className="p-3 text-sm text-cti-gray">No subfolders here.</p>
+            <p className="p-3 text-sm text-cti-gray">No Subfolders Here.</p>
           ) : (
             folders.map((f) => (
               <button
@@ -166,7 +166,7 @@ function FolderBrowser({ projectId, onClose, onSelected }: { projectId: string; 
             ))
           )}
         </div>
-        <button className="btn-primary w-full" type="button" onClick={selectHere}>Use this folder</button>
+        <button className="btn-primary w-full" type="button" onClick={selectHere}>Use This Folder</button>
       </div>
     </div>
   )

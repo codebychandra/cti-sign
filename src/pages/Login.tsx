@@ -30,7 +30,7 @@ export function Login() {
           <Logo />
         </div>
         <div className="card p-6">
-          <h1 className="mb-1 font-heading text-xl font-bold text-cti-black">Sign in</h1>
+          <h1 className="mb-1 font-heading text-xl font-bold text-cti-black">Sign In</h1>
           <p className="mb-5 text-sm text-cti-gray">CTI Official e-Signature Platform</p>
 
           <form onSubmit={submit} className="space-y-4">
@@ -60,7 +60,7 @@ export function Login() {
             </div>
             {error && <p className="text-sm text-cti-red">{error}</p>}
             <button className="btn-primary w-full" disabled={busy}>
-              {busy ? 'Please wait…' : 'Sign in'}
+              {busy ? 'Please Wait…' : 'Sign In'}
             </button>
           </form>
         </div>

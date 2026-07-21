@@ -48,11 +48,11 @@ export function OneDriveCallback() {
   return (
     <div className="grid min-h-screen place-items-center bg-cti-bg px-4">
       <div className="card w-full max-w-sm space-y-4 p-6 text-center">
-        <h1 className="font-heading text-lg font-bold text-cti-black">OneDrive connection</h1>
+        <h1 className="font-heading text-lg font-bold text-cti-black">OneDrive Connection</h1>
         <p className={`text-sm ${status === 'error' ? 'text-cti-red' : 'text-cti-gray'}`}>{message}</p>
         {status !== 'working' && (
-          <Link to={projectId ? `/projects/${projectId}?tab=template` : '/'} className="btn-primary w-full">
-            Back to project
+          <Link to={projectId ? `/projects/${projectId}?tab=setting` : '/'} className="btn-primary w-full">
+            Back to Project
           </Link>
         )}
       </div>

@@ -5,8 +5,8 @@ import type { Project, ProjectType } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 
 const projectTypes: { value: ProjectType; label: string; description: string }[] = [
-  { value: 'sent_signature', label: 'Sent signature', description: 'Send records to crew for signature and admin completion.' },
-  { value: 'auto_populate', label: 'Auto populate', description: 'Map PDF templates and generate documents from record values only.' },
+  { value: 'sent_signature', label: 'Sent Signature', description: 'Send records to crew for signature and admin completion.' },
+  { value: 'auto_populate', label: 'Auto Populate', description: 'Map PDF templates and generate documents from record values only.' },
 ]
 
 export function Dashboard() {
@@ -53,10 +53,10 @@ export function Dashboard() {
     <>
       <PageHeader
         title="Projects"
-        subtitle="Group your signing workflows"
+        subtitle="Group Your Signing Workflows"
         actions={
           <button className="btn-primary" onClick={() => setCreating((v) => !v)}>
-            {creating ? 'Cancel' : '+ New project'}
+            {creating ? 'Cancel' : '+ New Project'}
           </button>
         }
       />
@@ -64,11 +64,11 @@ export function Dashboard() {
       {creating && (
         <form onSubmit={create} className="card mb-6 space-y-4 p-5">
           <div>
-            <label className="label">Project name</label>
+            <label className="label">Project Name</label>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           </div>
           <div>
-            <label className="label">Project type</label>
+            <label className="label">Project Type</label>
             <div className="grid gap-3 sm:grid-cols-2">
               {projectTypes.map((type) => (
                 <label
@@ -100,7 +100,7 @@ export function Dashboard() {
             />
           </div>
           {error && <p className="text-sm text-cti-red">{error}</p>}
-          <button className="btn-primary">Create project</button>
+          <button className="btn-primary">Create Project</button>
         </form>
       )}
 
@@ -117,7 +117,7 @@ export function Dashboard() {
               <div className="flex items-start justify-between gap-3">
                 <h3 className="font-heading font-bold text-cti-black">{p.name}</h3>
                 <span className="badge bg-cti-bg text-cti-gray">
-                  {p.project_type === 'auto_populate' ? 'Auto populate' : 'Sent signature'}
+                  {p.project_type === 'auto_populate' ? 'Auto Populate' : 'Sent Signature'}
                 </span>
               </div>
               {p.description && <p className="mt-1 text-sm text-cti-gray">{p.description}</p>}

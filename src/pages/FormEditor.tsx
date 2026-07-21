@@ -8,10 +8,10 @@ import { PageHeader } from '../components/Layout'
 const RENDER_WIDTH = 720
 const FIELD_TYPES: { type: FieldType; label: string; w: number; h: number }[] = [
   { type: 'signature', label: 'Signature', w: 0.26, h: 0.06 },
-  { type: 'signed_date', label: 'Signed date', w: 0.18, h: 0.04 },
+  { type: 'signed_date', label: 'Signed Date', w: 0.18, h: 0.04 },
   { type: 'initials', label: 'Initials', w: 0.1, h: 0.05 },
   { type: 'text', label: 'Text', w: 0.26, h: 0.04 },
-  { type: 'textarea', label: 'Text area', w: 0.34, h: 0.11 },
+  { type: 'textarea', label: 'Text Area', w: 0.34, h: 0.11 },
   { type: 'date', label: 'Date', w: 0.16, h: 0.04 },
   { type: 'number', label: 'Number', w: 0.16, h: 0.04 },
   { type: 'email', label: 'Email', w: 0.26, h: 0.04 },
@@ -305,10 +305,10 @@ export function FormEditor() {
   return <>
     <PageHeader
       title={form.name}
-      subtitle="Upload the template PDF, then drop signature fields and mapped record columns."
+      subtitle="Upload the Template PDF, Then Drop Signature Fields and Mapped Record Columns."
       actions={
         <div className="flex items-center gap-3">
-          {dirty && <span className="text-xs font-semibold text-cti-red">Unsaved changes</span>}
+          {dirty && <span className="text-xs font-semibold text-cti-red">Unsaved Changes</span>}
           <button
             type="button"
             className="btn-ghost"
@@ -319,19 +319,19 @@ export function FormEditor() {
           >
             Back
           </button>
-          <button className="btn-primary" onClick={save} disabled={busy || !pdfBytes}>Save mapping</button>
+          <button className="btn-primary" onClick={save} disabled={busy || !pdfBytes}>Save Mapping</button>
         </div>
       }
     />
-    {!pdfBytes ? <div className="card grid place-items-center gap-4 p-12 text-center"><p className="text-cti-gray">No template uploaded yet.</p><label className="btn-primary cursor-pointer">Upload PDF template<input type="file" accept="application/pdf" className="hidden" onChange={onUpload} /></label>{status && <p className="text-sm text-cti-gray">{status}</p>}</div> : (
+    {!pdfBytes ? <div className="card grid place-items-center gap-4 p-12 text-center"><p className="text-cti-gray">No Template Uploaded Yet.</p><label className="btn-primary cursor-pointer">Upload PDF Template<input type="file" accept="application/pdf" className="hidden" onChange={onUpload} /></label>{status && <p className="text-sm text-cti-gray">{status}</p>}</div> : (
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-6">{Array.from({ length: pageCount }).map((_, i) => <PageCanvas key={i} pdfBytes={pdfBytes} pageIndex={i} fields={fields.filter((f) => f.page === i)} customFields={customFields} selectedIds={selectedIds} preview={preview} onAdd={(nx, ny) => addField(i, nx, ny)} onSelect={selectField} onMove={moveField} onResize={(id, w, h) => setFields((prev) => prev.map((field) => field.id === id ? normalizeField({ ...field, width: w, height: h }) : field))} onCommitHistory={pushHistory} />)}</div>
         <aside className="lg:sticky lg:top-20 lg:self-start"><div className="card p-4">
-          <p className="label">Mode</p><button type="button" onClick={() => setPreview((value) => !value)} className={preview ? 'btn-primary w-full' : 'btn-ghost w-full'}>{preview ? 'Preview on' : 'Preview result'}</button><p className="mt-2 text-xs text-cti-gray">{preview ? 'Showing dummy values so you can check alignment.' : 'Preview fills mapped fields with sample values.'}</p>
+          <p className="label">Mode</p><button type="button" onClick={() => setPreview((value) => !value)} className={preview ? 'btn-primary w-full' : 'btn-ghost w-full'}>{preview ? 'Preview On' : 'Preview Result'}</button><p className="mt-2 text-xs text-cti-gray">{preview ? 'Showing dummy values so you can check alignment.' : 'Preview fills mapped fields with sample values.'}</p>
           <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Edit</p><div className="grid grid-cols-2 gap-2"><button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={undo} disabled={!history.length}>Undo</button><button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={redo} disabled={!future.length}>Redo</button><button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={copyFields} disabled={!selectedIds.length}>Copy</button><button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={pasteFields} disabled={!copiedFields.length}>Paste</button></div></div>
-          <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Field to place</p><div className="grid grid-cols-2 gap-2">{FIELD_TYPES.map((t) => <button key={t.type} onClick={() => setTool(t.type)} disabled={preview} className={`btn text-xs ${tool === t.type ? 'bg-cti-red text-white' : 'border border-cti-line bg-white text-cti-ink hover:bg-cti-bg'}`}>{t.label}</button>)}</div><p className="mt-3 text-xs text-cti-gray">Use Text/Date/Number/Email/Text area fields for mapped record columns.</p></div>
-          <label className="btn-ghost mt-4 w-full cursor-pointer text-xs">Replace template PDF<input type="file" accept="application/pdf" className="hidden" onChange={onUpload} /></label>
-          {detectedFields.length > 0 && <button type="button" className="btn-primary mt-2 w-full text-xs" onClick={insertDetectedFields}>Insert {detectedFields.length} detected field(s)</button>}
+          <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Field to Place</p><div className="grid grid-cols-2 gap-2">{FIELD_TYPES.map((t) => <button key={t.type} onClick={() => setTool(t.type)} disabled={preview} className={`btn text-xs ${tool === t.type ? 'bg-cti-red text-white' : 'border border-cti-line bg-white text-cti-ink hover:bg-cti-bg'}`}>{t.label}</button>)}</div><p className="mt-3 text-xs text-cti-gray">Use Text/Date/Number/Email/Text Area fields for mapped record columns.</p></div>
+          <label className="btn-ghost mt-4 w-full cursor-pointer text-xs">Replace Template PDF<input type="file" accept="application/pdf" className="hidden" onChange={onUpload} /></label>
+          {detectedFields.length > 0 && <button type="button" className="btn-primary mt-2 w-full text-xs" onClick={insertDetectedFields}>Insert {detectedFields.length} Detected Field(s)</button>}
           {selectedField && !preview && <FieldInspector field={selectedField} customFields={customFields} onChange={(p) => updateField(selectedField.id, p)} onDelete={() => removeField(selectedField.id)} />}
           {selectedIds.length > 1 && !preview && <MultiFieldInspector count={selectedIds.length} onAlign={alignSelectedFields} onVerticalAlign={verticalAlignSelectedFields} onFullWidth={fullWidthSelectedFields} onDelete={removeSelectedFields} />}
           {status && <p className="mt-3 text-xs text-cti-gray">{status}</p>}
@@ -347,7 +347,7 @@ function FieldMappingList({ fields, customFields, onMap }: { fields: LocalField[
   if (!mappable.length) return null
   return (
     <div className="card mt-6 p-5">
-      <h2 className="font-heading text-base font-bold text-cti-black">Map fields to record columns</h2>
+      <h2 className="font-heading text-base font-bold text-cti-black">Map Fields to Record Columns</h2>
       <p className="mt-1 text-sm text-cti-gray">
         Each number here matches the number badge on the same field on the PDF above. Pick which record column
         auto-fills each one — the rest stay blank for the signer or auto-populate to type in.
@@ -357,7 +357,7 @@ function FieldMappingList({ fields, customFields, onMap }: { fields: LocalField[
           <div key={f.id} className="flex items-center gap-2 rounded-md border border-cti-line p-2">
             <span className="w-12 shrink-0 text-xs font-semibold text-cti-gray">#{f.sort_order + 1}</span>
             <select className="input py-1 text-xs" value={f.custom_field_id ?? ''} onChange={(e) => onMap(f.id, e.target.value)}>
-              <option value="">Signer/manual field</option>
+              <option value="">Signer/Manual Field</option>
               {customFields.map((cf) => <option key={cf.id} value={cf.id}>{cf.label}</option>)}
             </select>
           </div>
@@ -373,11 +373,11 @@ function FieldInspector({ field, customFields, onChange, onDelete }: { field: Lo
   const alignFieldVertical = (align: VerticalAlign) => { if (align === 'top') onChange({ y: 0 }); if (align === 'middle') onChange({ y: clamp((1 - field.height) / 2, 0, 1 - field.height) }); if (align === 'bottom') onChange({ y: clamp(1 - field.height, 0, 1 - field.height) }) }
   const fontSize = field.font_size ?? defaultFontSize(field.type)
   const canMapCustom = !['signature', 'initials'].includes(field.type)
-  return <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Selected: {fieldLabel(field.type)}</p><label className="label mt-2">Label</label><input className="input" value={field.label} onChange={(e) => onChange({ label: e.target.value })} />{canMapCustom && <div className="mt-3"><label className="label">Mapped record column</label><select className="input" value={field.custom_field_id ?? ''} onChange={(e) => { const match = customFields.find((customField) => customField.id === e.target.value); const mappedType = match ? typeForCustomFieldType(match.type) : null; onChange({ custom_field_id: e.target.value || null, label: match?.label ?? field.label, ...(mappedType ? { type: mappedType } : {}) }) }}><option value="">Signer/manual field</option>{customFields.map((customField) => <option key={customField.id} value={customField.id}>{customField.label}</option>)}</select></div>}<div className="mt-4 border-t border-cti-line pt-4"><p className="label">Field position</p><div className="grid grid-cols-2 gap-2"><MetricInput label="X" value={field.x} onChange={(value) => setMetric('x', value)} /><MetricInput label="Y" value={field.y} onChange={(value) => setMetric('y', value)} /><MetricInput label="W" value={field.width} onChange={(value) => setMetric('width', value)} /><MetricInput label="H" value={field.height} onChange={(value) => setMetric('height', value)} /></div><div className="mt-2 grid grid-cols-3 gap-1">{TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignField(align)}>{align}</button>)}</div><div className="mt-2 grid grid-cols-3 gap-1">{(['top', 'middle', 'bottom'] as VerticalAlign[]).map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignFieldVertical(align)}>{align}</button>)}</div><button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={() => onChange({ x: 0, width: 1 })}>Full width</button></div><div className="mt-4 border-t border-cti-line pt-4"><p className="label">Text style</p><label className="label mt-2">Text align</label><select className="input" value={field.text_align ?? 'left'} onChange={(e) => onChange({ text_align: e.target.value as TextAlign })}>{TEXT_ALIGN.map((align) => <option key={align} value={align}>{align}</option>)}</select><label className="label mt-2">Text size</label><div className="flex items-center gap-2"><input className="input" type="number" min={6} max={72} step={1} value={fontSize} onChange={(e) => onChange({ font_size: clamp(Number(e.target.value) || defaultFontSize(field.type), 6, 72) })} /><span className="text-xs text-cti-gray">pt</span></div></div><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={field.required} onChange={(e) => onChange({ required: e.target.checked })} />Required</label><button className="btn-ghost mt-3 w-full text-cti-red" onClick={onDelete}>Delete field</button></div>
+  return <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Selected: {fieldLabel(field.type)}</p><label className="label mt-2">Label</label><input className="input" value={field.label} onChange={(e) => onChange({ label: e.target.value })} />{canMapCustom && <div className="mt-3"><label className="label">Mapped Record Column</label><select className="input" value={field.custom_field_id ?? ''} onChange={(e) => { const match = customFields.find((customField) => customField.id === e.target.value); const mappedType = match ? typeForCustomFieldType(match.type) : null; onChange({ custom_field_id: e.target.value || null, label: match?.label ?? field.label, ...(mappedType ? { type: mappedType } : {}) }) }}><option value="">Signer/Manual Field</option>{customFields.map((customField) => <option key={customField.id} value={customField.id}>{customField.label}</option>)}</select></div>}<div className="mt-4 border-t border-cti-line pt-4"><p className="label">Field Position</p><div className="grid grid-cols-2 gap-2"><MetricInput label="X" value={field.x} onChange={(value) => setMetric('x', value)} /><MetricInput label="Y" value={field.y} onChange={(value) => setMetric('y', value)} /><MetricInput label="W" value={field.width} onChange={(value) => setMetric('width', value)} /><MetricInput label="H" value={field.height} onChange={(value) => setMetric('height', value)} /></div><div className="mt-2 grid grid-cols-3 gap-1">{TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignField(align)}>{capitalize(align)}</button>)}</div><div className="mt-2 grid grid-cols-3 gap-1">{(['top', 'middle', 'bottom'] as VerticalAlign[]).map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignFieldVertical(align)}>{capitalize(align)}</button>)}</div><button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={() => onChange({ x: 0, width: 1 })}>Full Width</button></div><div className="mt-4 border-t border-cti-line pt-4"><p className="label">Text Style</p><label className="label mt-2">Text Align</label><select className="input" value={field.text_align ?? 'left'} onChange={(e) => onChange({ text_align: e.target.value as TextAlign })}>{TEXT_ALIGN.map((align) => <option key={align} value={align}>{capitalize(align)}</option>)}</select><label className="label mt-2">Text Size</label><div className="flex items-center gap-2"><input className="input" type="number" min={6} max={72} step={1} value={fontSize} onChange={(e) => onChange({ font_size: clamp(Number(e.target.value) || defaultFontSize(field.type), 6, 72) })} /><span className="text-xs text-cti-gray">pt</span></div></div><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={field.required} onChange={(e) => onChange({ required: e.target.checked })} />Required</label><button className="btn-ghost mt-3 w-full text-cti-red" onClick={onDelete}>Delete Field</button></div>
 }
 
 function MultiFieldInspector({ count, onAlign, onVerticalAlign, onFullWidth, onDelete }: { count: number; onAlign: (align: TextAlign) => void; onVerticalAlign: (align: VerticalAlign) => void; onFullWidth: () => void; onDelete: () => void }) {
-  return <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Selected: {count} fields</p><div className="mt-2 grid grid-cols-3 gap-1">{TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onAlign(align)}>{align}</button>)}</div><div className="mt-2 grid grid-cols-3 gap-1">{(['top', 'middle', 'bottom'] as VerticalAlign[]).map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onVerticalAlign(align)}>{align}</button>)}</div><button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={onFullWidth}>Full width</button><button className="btn-ghost mt-3 w-full text-cti-red" onClick={onDelete}>Delete selected</button></div>
+  return <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Selected: {count} Fields</p><div className="mt-2 grid grid-cols-3 gap-1">{TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onAlign(align)}>{align}</button>)}</div><div className="mt-2 grid grid-cols-3 gap-1">{(['top', 'middle', 'bottom'] as VerticalAlign[]).map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onVerticalAlign(align)}>{align}</button>)}</div><button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={onFullWidth}>Full Width</button><button className="btn-ghost mt-3 w-full text-cti-red" onClick={onDelete}>Delete Selected</button></div>
 }
 
 function MetricInput({ label, value, onChange }: { label: string; value: number; onChange: (value: string) => void }) {
@@ -429,9 +429,13 @@ function sampleCustomValue(field: ProjectCustomField) {
 }
 
 function fieldLabel(type: FieldType) {
-  if (type === 'signed_date') return 'signed date'
-  if (type === 'textarea') return 'text area'
-  return type
+  if (type === 'signed_date') return 'Signed Date'
+  if (type === 'textarea') return 'Text Area'
+  return capitalize(type)
+}
+
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)) }

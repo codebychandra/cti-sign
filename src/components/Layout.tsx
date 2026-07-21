@@ -126,7 +126,7 @@ function ProfileMenu({ email, onSignOut, compact = false }: { email: string; onS
           role="menu"
         >
           <div className="border-b border-cti-line px-3 py-2">
-            <p className="text-xs font-semibold uppercase text-cti-gray">Signed in as</p>
+            <p className="text-xs font-semibold uppercase text-cti-gray">Signed in As</p>
             <p className="truncate text-sm font-semibold text-cti-ink">{email}</p>
           </div>
           <Link className="mt-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-cti-ink hover:bg-cti-bg" to="/settings">
@@ -139,7 +139,7 @@ function ProfileMenu({ email, onSignOut, compact = false }: { email: string; onS
             onClick={onSignOut}
           >
             <SignOutIcon />
-            Sign out
+            Sign Out
           </button>
         </div>
       )}

@@ -487,8 +487,8 @@ function FieldRow(props: SettingTabProps & { field: ProjectCustomField; index: n
   return <tr className="border-b border-cti-line last:border-0"><td className="px-4 py-3"><p className="font-semibold text-cti-ink">{field.label}</p></td><td className="px-4 py-3 text-cti-gray">{fieldTypeLabel(field)}</td><td className="px-4 py-3 text-cti-gray">{field.required ? 'Yes' : 'No'}</td><td className="px-4 py-3 text-cti-gray">{field.show_in_table ? 'Shown' : 'Hidden'}</td><td className="px-4 py-3"><div className="flex justify-end gap-1"><IconButton label="Move up" disabled={props.index === 0} onClick={() => props.moveCustomField(field.id, -1)}><ArrowUpIcon /></IconButton><IconButton label="Move down" disabled={props.index === props.total - 1} onClick={() => props.moveCustomField(field.id, 1)}><ArrowDownIcon /></IconButton><IconButton label={field.show_in_table ? 'Hide from table' : 'Show in table'} onClick={() => props.toggleFieldVisible(field)}>{field.show_in_table ? <EyeOffIcon /> : <EyeIcon />}</IconButton><IconButton label="Edit field" onClick={() => props.beginEditField(field)}><PencilIcon /></IconButton><IconButton label="Delete field" tone="danger" onClick={() => props.deleteCustomField(field.id)}><TrashIcon /></IconButton></div></td></tr>
 }
 
-function IconButton({ label, onClick, disabled, tone, children }: { label: string; onClick: () => void; disabled?: boolean; tone?: 'danger' | 'success' | 'save'; children: React.ReactNode }) {
-  const toneClass = tone === 'danger' ? 'text-cti-red hover:bg-red-50' : tone === 'success' ? 'text-green-700 hover:bg-green-50' : tone === 'save' ? 'border-cti-red text-cti-red hover:bg-red-50' : 'text-cti-ink'
+function IconButton({ label, onClick, disabled, tone, children }: { label: string; onClick: () => void; disabled?: boolean; tone?: 'danger'; children: React.ReactNode }) {
+  const toneClass = tone === 'danger' ? 'text-cti-red hover:bg-red-50' : 'text-cti-ink'
   return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border border-cti-line transition-colors hover:bg-cti-bg disabled:cursor-not-allowed disabled:opacity-30 ${toneClass}`}>{children}</button>
 }
 
@@ -545,20 +545,19 @@ type RecordsTableProps = {
 
 function RecordsTable(props: RecordsTableProps) {
   return (
-    <div className="card overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-cti-line bg-cti-bg text-xs uppercase text-cti-gray">
+    <div className="card overflow-x-auto p-0">
+      <table className="w-full border-collapse text-left text-sm">
+        <thead className="bg-cti-black text-xs uppercase tracking-wide text-white">
           <tr>
-            <th className="px-3 py-3">Actions</th>
-            {!props.completed && !props.isAutoPopulate && <th className="px-2 py-3"></th>}
-            <th className="px-4 py-3">Created</th>
-            {!props.isAutoPopulate && <th className="px-4 py-3">Signer</th>}
-            <th className="px-4 py-3">Status</th>
-            {props.fields.map((field) => <th key={field.id} className="px-4 py-3">{field.label}</th>)}
+            <th className="whitespace-nowrap px-4 py-3">Action</th>
+            <th className="whitespace-nowrap px-4 py-3">Created</th>
+            {!props.isAutoPopulate && <th className="whitespace-nowrap px-4 py-3">Signer</th>}
+            <th className="whitespace-nowrap px-4 py-3">Status</th>
+            {props.fields.map((field) => <th key={field.id} className="whitespace-nowrap px-4 py-3">{field.label}</th>)}
           </tr>
         </thead>
-        <tbody>
-          {props.records.length === 0 && <tr><td colSpan={props.fields.length + 5} className="px-4 py-6 text-center text-cti-gray">No records.</td></tr>}
+        <tbody className="divide-y divide-cti-line">
+          {props.records.length === 0 && <tr><td colSpan={props.fields.length + 4} className="px-4 py-6 text-center text-cti-gray">No records.</td></tr>}
           {props.records.map((record) => <RecordRow key={record.id} record={record} {...props} />)}
         </tbody>
       </table>
@@ -594,16 +593,19 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
   }
 
   return (
-    <tr className="border-b border-cti-line last:border-0 align-top">
-      <td className="px-3 py-3">
-        <div className="flex flex-wrap gap-1">
-          {dirty && <IconButton label="Save changes" tone="save" onClick={save} disabled={saving}><SaveIcon /></IconButton>}
+    <tr className="align-top hover:bg-cti-bg">
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap items-center gap-1.5">
           {!props.completed && !props.isAutoPopulate && (
-            <IconButton label={record.status === 'draft' ? 'Send for signature' : 'Send reminder'} onClick={() => props.sendOne(record.id)}><SendIcon /></IconButton>
+            <input type="checkbox" className="mr-0.5 h-4 w-4 shrink-0" checked={Boolean(props.selectedRecords[record.id])} onChange={(e) => (props.setSelectedRecords as React.Dispatch<React.SetStateAction<Record<string, boolean>>>)((state) => ({ ...state, [record.id]: e.target.checked }))} />
           )}
+          {!props.completed && !props.isAutoPopulate && (
+            <SendButton label={record.status === 'draft' ? 'Send' : 'Remind'} onClick={() => props.sendOne(record.id)} />
+          )}
+          {dirty && <RowActionIcon label="Save changes" tone="save" onClick={save} disabled={saving}><SaveIcon /></RowActionIcon>}
           {!props.isAutoPopulate && (
             <span className="relative">
-              <IconButton label="Timeline" onClick={() => setShowTimeline((v) => !v)}><ClockIcon /></IconButton>
+              <RowActionIcon label="Timeline" tone="timeline" onClick={() => setShowTimeline((v) => !v)}><ClockIcon /></RowActionIcon>
               {showTimeline && (
                 <span className="absolute left-0 top-full z-20 mt-1">
                   <Timeline record={record} />
@@ -611,24 +613,19 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
               )}
             </span>
           )}
-          {!props.isAutoPopulate && <IconButton label="Open signing letter" onClick={() => window.open(signUrlFor(record), '_blank')}><ExternalLinkIcon /></IconButton>}
-          {!props.completed && props.isAutoPopulate && <IconButton label="Download PDF" onClick={() => props.downloadPdf(record)}><DownloadIcon /></IconButton>}
-          {props.completed && !props.isAutoPopulate && <IconButton label="Download signed PDF" onClick={() => props.downloadSignedPdf(record)}><DownloadIcon /></IconButton>}
-          {props.completed && !props.isAutoPopulate && record.onedrive_url && <IconButton label="Open copy in OneDrive" onClick={() => window.open(record.onedrive_url!, '_blank')}><ExternalLinkIcon /></IconButton>}
-          {!props.completed && isSubmitted && <IconButton label="Mark complete" tone="success" onClick={() => props.markComplete(record.id)}><CheckCircleIcon /></IconButton>}
-          {!props.completed && <IconButton label="Delete record" tone="danger" onClick={() => props.deleteRecord(record.id)}><TrashIcon /></IconButton>}
+          {!props.isAutoPopulate && <RowActionIcon label="Open signing letter" tone="letter" onClick={() => window.open(signUrlFor(record), '_blank')}><ExternalLinkIcon /></RowActionIcon>}
+          {!props.completed && props.isAutoPopulate && <RowActionIcon label="Download PDF" tone="neutral" onClick={() => props.downloadPdf(record)}><DownloadIcon /></RowActionIcon>}
+          {props.completed && !props.isAutoPopulate && <RowActionIcon label="Download signed PDF" tone="neutral" onClick={() => props.downloadSignedPdf(record)}><DownloadIcon /></RowActionIcon>}
+          {props.completed && !props.isAutoPopulate && record.onedrive_url && <RowActionIcon label="Open copy in OneDrive" tone="letter" onClick={() => window.open(record.onedrive_url!, '_blank')}><ExternalLinkIcon /></RowActionIcon>}
+          {!props.completed && isSubmitted && <RowActionIcon label="Mark complete" tone="success" onClick={() => props.markComplete(record.id)}><CheckCircleIcon /></RowActionIcon>}
+          {!props.completed && <RowActionIcon label="Delete record" tone="danger" onClick={() => props.deleteRecord(record.id)}><TrashIcon /></RowActionIcon>}
         </div>
       </td>
-      {!props.completed && !props.isAutoPopulate && (
-        <td className="px-2 py-3">
-          <input type="checkbox" checked={Boolean(props.selectedRecords[record.id])} onChange={(e) => (props.setSelectedRecords as React.Dispatch<React.SetStateAction<Record<string, boolean>>>)((state) => ({ ...state, [record.id]: e.target.checked }))} />
-        </td>
-      )}
-      <td className="px-4 py-3 whitespace-nowrap text-cti-gray">{new Date(record.created_at).toLocaleDateString()}</td>
+      <td className="whitespace-nowrap px-4 py-3 text-cti-gray">{new Date(record.created_at).toLocaleDateString()}</td>
       {!props.isAutoPopulate && <td className="px-4 py-3"><p className="font-semibold text-cti-ink">{record.signer_name}</p><p className="text-xs text-cti-gray">{record.signer_email}</p></td>}
       <td className="px-4 py-3"><StatusBadge status={record.status} /></td>
       {props.fields.map((field) => (
-        <td key={field.id} className="min-w-[160px] px-4 py-3">
+        <td key={field.id} className="min-w-[160px] px-4 py-2.5">
           <CustomFieldInput field={field} disabled={props.completed || field.type === 'auto_number'} value={values[field.id] ?? ''} onChange={(value) => setValues((current) => ({ ...current, [field.id]: value }))} />
         </td>
       ))}
@@ -668,6 +665,23 @@ function Timeline({ record }: { record: SignRecord }) {
       </ol>
     </div>
   )
+}
+
+function SendButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className="flex shrink-0 items-center gap-1.5 rounded-md bg-cti-blue px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-700"><SendIcon />{label}</button>
+}
+
+const rowActionTones = {
+  save: 'bg-cti-red text-white hover:bg-cti-redDark',
+  timeline: 'bg-green-100 text-green-700 hover:bg-green-200',
+  letter: 'bg-teal-100 text-teal-700 hover:bg-teal-200',
+  success: 'bg-blue-100 text-cti-blue hover:bg-blue-200',
+  danger: 'bg-red-100 text-cti-red hover:bg-red-200',
+  neutral: 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+} as const
+
+function RowActionIcon({ label, onClick, disabled, tone, children }: { label: string; onClick: () => void; disabled?: boolean; tone: keyof typeof rowActionTones; children: React.ReactNode }) {
+  return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${rowActionTones[tone]}`}>{children}</button>
 }
 
 function SendIcon() {

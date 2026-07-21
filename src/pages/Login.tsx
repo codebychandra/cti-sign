@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { Logo } from '../components/Logo'
+import { setStaffName } from '../lib/settings'
 
 export function Login() {
   const { session, login } = useAuth()
@@ -19,6 +20,7 @@ export function Login() {
     const { error } = await login(password)
     setBusy(false)
     if (error) setError(error)
+    else if (username.trim()) setStaffName(username.trim())
   }
 
   return (

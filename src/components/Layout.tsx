@@ -2,10 +2,12 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useState, type ReactNode } from 'react'
 import { Logo } from './Logo'
 import { useAuth } from '../lib/auth'
+import { getAppSettings } from '../lib/settings'
 
 export function Layout({ children }: { children: ReactNode }) {
   const { session, logout } = useAuth()
   const navigate = useNavigate()
+  const staffName = getAppSettings().staffName
 
   const handleSignOut = () => {
     logout()
@@ -27,7 +29,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <SidebarItem to="/" icon={<ProjectsIcon />}>Projects</SidebarItem>
             </nav>
             <div className="border-t border-cti-line p-4">
-              <ProfileMenu email={'CTI Staff'} onSignOut={handleSignOut} />
+              <ProfileMenu email={staffName} onSignOut={handleSignOut} />
             </div>
           </>
         )}
@@ -39,7 +41,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to="/" aria-label="CTI eSign home">
               <Logo />
             </Link>
-            {session && <ProfileMenu email={'CTI Staff'} onSignOut={handleSignOut} compact />}
+            {session && <ProfileMenu email={staffName} onSignOut={handleSignOut} compact />}
           </div>
           {session && (
             <nav className="flex gap-2 overflow-x-auto border-t border-cti-line px-4 py-2">

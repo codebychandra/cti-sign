@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/Layout'
-import { defaultSettings, getAppSettings, resetAppSettings, saveAppSettings } from '../lib/settings'
+import { defaultSettings, getAppSettings, resetAppSettings, saveAppSettings, setStaffName } from '../lib/settings'
 
 export function Settings() {
+  const [displayName, setDisplayName] = useState(() => getAppSettings().staffName)
+  const [profileSaved, setProfileSaved] = useState(false)
+
   const [organizationName, setOrganizationName] = useState(() => getAppSettings().organizationName)
   const [supportEmail, setSupportEmail] = useState(() => getAppSettings().supportEmail)
   const [defaultSignatureMessage, setDefaultSignatureMessage] = useState(
@@ -10,9 +13,17 @@ export function Settings() {
   )
   const [saved, setSaved] = useState(false)
 
+  const saveProfile = (e: React.FormEvent) => {
+    e.preventDefault()
+    setStaffName(displayName.trim() || defaultSettings.staffName)
+    setProfileSaved(true)
+    window.setTimeout(() => setProfileSaved(false), 1800)
+  }
+
   const save = (e: React.FormEvent) => {
     e.preventDefault()
     saveAppSettings({
+      ...getAppSettings(),
       organizationName: organizationName.trim() || defaultSettings.organizationName,
       supportEmail: supportEmail.trim(),
       defaultSignatureMessage:
@@ -24,6 +35,7 @@ export function Settings() {
 
   const reset = () => {
     resetAppSettings()
+    setDisplayName(defaultSettings.staffName)
     setOrganizationName(defaultSettings.organizationName)
     setSupportEmail(defaultSettings.supportEmail)
     setDefaultSignatureMessage(defaultSettings.defaultSignatureMessage)
@@ -33,10 +45,33 @@ export function Settings() {
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="Staff preferences and app configuration" />
+      <PageHeader title="Settings" subtitle="Your profile and app configuration" />
 
-      <div className="max-w-2xl">
+      <div className="max-w-2xl space-y-6">
+        <form onSubmit={saveProfile} className="card space-y-5 p-6">
+          <div>
+            <h2 className="font-heading text-base font-bold text-cti-black">Your profile</h2>
+            <p className="mt-1 text-sm text-cti-gray">Shown as "Signed in as" in the profile menu.</p>
+          </div>
+          <div>
+            <label className="label">Display name</label>
+            <input
+              className="input"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="CTI Staff"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="btn-primary">Save profile</button>
+            {profileSaved && <span className="text-sm font-semibold text-cti-ink">Saved</span>}
+          </div>
+        </form>
+
         <form onSubmit={save} className="card space-y-5 p-6">
+          <div>
+            <h2 className="font-heading text-base font-bold text-cti-black">App configuration</h2>
+          </div>
           <div>
             <label className="label">Organization name</label>
             <input

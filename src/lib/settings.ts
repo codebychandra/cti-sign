@@ -1,10 +1,12 @@
 export interface AppSettings {
+  staffName: string
   organizationName: string
   supportEmail: string
   defaultSignatureMessage: string
 }
 
 export const defaultSettings: AppSettings = {
+  staffName: 'CTI Staff',
   organizationName: 'CTI',
   supportEmail: '',
   defaultSignatureMessage: 'Please review and sign the attached document.',
@@ -26,6 +28,10 @@ export function getAppSettings(): AppSettings {
 
 export function saveAppSettings(settings: AppSettings) {
   window.localStorage.setItem(storageKey, JSON.stringify(settings))
+}
+
+export function setStaffName(staffName: string) {
+  saveAppSettings({ ...getAppSettings(), staffName })
 }
 
 export function resetAppSettings() {

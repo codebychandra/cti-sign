@@ -29,7 +29,7 @@ export function Login() {
         </div>
         <div className="card p-6">
           <h1 className="mb-1 font-heading text-xl font-bold text-cti-black">Sign in</h1>
-          <p className="mb-5 text-sm text-cti-gray">Sign in to CTI eSign: Official e-Signature Platform</p>
+          <p className="mb-5 text-sm text-cti-gray">CTI Official e-Signature Platform</p>
 
           <form onSubmit={submit} className="space-y-4">
             <div>

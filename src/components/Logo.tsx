@@ -3,7 +3,7 @@ import { ctiEsignLogo } from '../assets/ctiEsignLogo'
 export function Logo({ className = '' }: { className?: string }) {
   return (
     <div className={`flex items-center gap-3 ${className}`}>
-      <span className="flex h-14 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+      <span className="flex h-14 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white p-1.5">
         <img src={ctiEsignLogo} alt="CTI eSign" className="h-full w-full object-contain" />
       </span>
       <div className="leading-tight">

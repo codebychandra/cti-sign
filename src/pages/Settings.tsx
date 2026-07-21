@@ -35,7 +35,7 @@ export function Settings() {
     <>
       <PageHeader title="Settings" subtitle="Staff preferences and app configuration" />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="max-w-2xl">
         <form onSubmit={save} className="card space-y-5 p-6">
           <div>
             <label className="label">Organization name</label>
@@ -78,34 +78,7 @@ export function Settings() {
             {saved && <span className="text-sm font-semibold text-cti-ink">Saved</span>}
           </div>
         </form>
-
-        <aside className="space-y-4">
-          <section className="card p-5">
-            <h2 className="font-heading text-base font-bold text-cti-black">App status</h2>
-            <dl className="mt-4 space-y-3 text-sm">
-              <StatusRow label="Backend" value="Cloudflare Worker + KV" />
-              <StatusRow label="Base path" value={import.meta.env.BASE_URL} />
-            </dl>
-          </section>
-
-          <section className="card p-5 text-sm text-cti-gray">
-            <h2 className="font-heading text-base font-bold text-cti-black">Deployment notes</h2>
-            <p className="mt-3">
-              The shared login password and Microsoft Graph (email/OneDrive) secrets are managed as Worker
-              secrets outside the browser, not here.
-            </p>
-          </section>
-        </aside>
       </div>
     </>
-  )
-}
-
-function StatusRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-xs uppercase text-cti-gray">{label}</dt>
-      <dd className="mt-1 break-words font-semibold text-cti-ink">{value}</dd>
-    </div>
   )
 }

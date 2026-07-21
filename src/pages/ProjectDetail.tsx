@@ -100,6 +100,17 @@ export function ProjectDetail() {
     }
   }
 
+  const updateProject = async (patch: { name: string; description: string; project_type: Project['project_type'] }) => {
+    if (!projectId) return
+    try {
+      await api.update('projects', projectId, patch)
+    } catch (e) {
+      setError((e as Error).message)
+      throw e
+    }
+    load()
+  }
+
   const renameTemplate = async (templateId: string, name: string) => {
     const cleanName = name.trim()
     if (!cleanName) return
@@ -337,7 +348,7 @@ export function ProjectDetail() {
       {activeTab === 'template' && <TemplateTab projectId={projectId!} template={template} customFields={customFields} ensureTemplate={ensureTemplate} renameTemplate={renameTemplate} deleteTemplate={deleteTemplate} fieldsManagerProps={{ customFields, newFieldLabel, setNewFieldLabel, newFieldType, setNewFieldType, newFieldRequired, setNewFieldRequired, newFieldShow, setNewFieldShow, newFieldPrefix, setNewFieldPrefix, newFieldStart, setNewFieldStart, newFieldOptions, setNewFieldOptions, editingFieldId, editFieldLabel, setEditFieldLabel, editFieldType, setEditFieldType, editFieldRequired, setEditFieldRequired, editFieldShow, setEditFieldShow, editFieldPrefix, setEditFieldPrefix, editFieldStart, setEditFieldStart, editFieldOptions, setEditFieldOptions, createCustomField, beginEditField, saveFieldEdit, cancelFieldEdit: () => setEditingFieldId(null), deleteCustomField, toggleFieldVisible, moveCustomField }} />}
       {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} recordValues={recordValues} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} downloadPdf={downloadAutoPopulatePdf} openPanel={setPanel} />}
       {activeTab === 'completed' && <CompletedTab isAutoPopulate={isAutoPopulate} records={completedRecords} visibleFields={visibleFields} recordValues={recordValues} />}
-      {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} />}
+      {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} project={project} updateProject={updateProject} />}
       {panel === 'add' && <RecordPanel title="Add record" onClose={() => setPanel(null)}><RecordForm isAutoPopulate={isAutoPopulate} template={template} signerName={signerName} setSignerName={setSignerName} signerEmail={signerEmail} setSignerEmail={setSignerEmail} message={message} setMessage={setMessage} customFields={customFields} customValues={customValues} setCustomValues={setCustomValues} createRecord={createRecord} /></RecordPanel>}
       {panel === 'import' && <RecordPanel title="Import records" onClose={() => setPanel(null)}><ImportPanel importText={importText} setImportText={setImportText} importRecords={importRecords} isAutoPopulate={isAutoPopulate} /></RecordPanel>}
     </>
@@ -351,8 +362,73 @@ function TemplateTab({ template, ensureTemplate, renameTemplate, deleteTemplate,
   return <div className="space-y-8"><section className="space-y-4"><div><h2 className="font-heading text-lg font-bold text-cti-black">Template PDF</h2><p className="mt-1 text-sm text-cti-gray">Upload the PDF and map fields onto it. Define input fields below first so they're available to map.</p></div><div className="card space-y-4 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1">{editing && template ? <div className="flex gap-2"><input className="input" value={name} onChange={(e) => setName(e.target.value)} /><button className="btn-primary" onClick={() => { renameTemplate(template.id, name); setEditing(false) }}>Save</button><button className="btn-ghost" onClick={() => { setName(template.name); setEditing(false) }}>Cancel</button></div> : <><p className="font-semibold text-cti-ink">{template?.name ?? 'Template'}</p><p className="text-sm text-cti-gray">{template?.has_template ? `Template ready - ${template.page_count} page(s)` : 'No PDF uploaded yet'}</p></>}</div>{template ? <Link to={`/forms/${template.id}/edit`} className="btn-primary whitespace-nowrap">Upload & map PDF</Link> : <button className="btn-primary whitespace-nowrap" onClick={ensureTemplate}>Upload & map PDF</button>}</div>{template && <div className="flex flex-wrap gap-2 border-t border-cti-line pt-3"><button className="btn-ghost px-3 py-2 text-xs" type="button" onClick={() => setEditing(true)}>Edit name</button><Link to={`/forms/${template.id}/edit`} className="btn-ghost px-3 py-2 text-xs">Replace PDF</Link><button className="btn-ghost px-3 py-2 text-xs text-cti-red" type="button" onClick={() => deleteTemplate(template.id)}>Delete template</button></div>}</div></section><SettingTab {...fieldsManagerProps} /></div>
 }
 
-function ProjectSettingTab({ projectId }: { projectId: string }) {
-  return <div className="max-w-md"><OneDriveConnectPanel projectId={projectId} /></div>
+const projectTypeOptions: { value: Project['project_type']; label: string; description: string }[] = [
+  { value: 'sent_signature', label: 'Sent signature', description: 'Send records to crew for signature and admin completion.' },
+  { value: 'auto_populate', label: 'Auto populate', description: 'Map PDF templates and generate documents from record values only.' },
+]
+
+function ProjectSettingTab({ projectId, project, updateProject }: { projectId: string; project: Project | null; updateProject: (patch: { name: string; description: string; project_type: Project['project_type'] }) => Promise<void> }) {
+  const [name, setName] = useState(project?.name ?? '')
+  const [description, setDescription] = useState(project?.description ?? '')
+  const [projectType, setProjectType] = useState<Project['project_type']>(project?.project_type ?? 'sent_signature')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setName(project?.name ?? '')
+    setDescription(project?.description ?? '')
+    setProjectType(project?.project_type ?? 'sent_signature')
+  }, [project?.id, project?.name, project?.description, project?.project_type])
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    setSaving(true)
+    try {
+      await updateProject({ name: name.trim(), description: description.trim(), project_type: projectType })
+      setSaved(true)
+      window.setTimeout(() => setSaved(false), 1800)
+    } catch {
+      // error already surfaced by updateProject
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="max-w-md space-y-6">
+      <form onSubmit={save} className="card space-y-4 p-5">
+        <h2 className="font-heading text-lg font-bold text-cti-black">Project details</h2>
+        <div>
+          <label className="label">Project name</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Description</label>
+          <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+        </div>
+        <div>
+          <label className="label">Project type</label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {projectTypeOptions.map((type) => (
+              <label key={type.value} className={`rounded-md border p-4 ${projectType === type.value ? 'border-cti-red bg-red-50' : 'border-cti-line bg-white'}`}>
+                <span className="flex items-center gap-2 font-semibold text-cti-ink">
+                  <input type="radio" name="projectTypeEdit" value={type.value} checked={projectType === type.value} onChange={() => setProjectType(type.value)} />
+                  {type.label}
+                </span>
+                <span className="mt-1 block text-sm text-cti-gray">{type.description}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          {saved && <span className="text-sm font-semibold text-cti-ink">Saved</span>}
+        </div>
+      </form>
+
+      <OneDriveConnectPanel projectId={projectId} />
+    </div>
+  )
 }
 
 function FormTab(props: { isAutoPopulate: boolean; template?: Form; records: SignRecord[]; visibleFields: ProjectCustomField[]; recordValues: Record<string, Record<string, string>>; selectedRecords: Record<string, boolean>; setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>; massMarkSent: () => void; deleteRecord: (recordId: string) => void; markComplete: (recordId: string) => void; downloadPdf: (record: SignRecord) => void; openPanel: (mode: PanelMode) => void }) {

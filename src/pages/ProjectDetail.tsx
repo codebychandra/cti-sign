@@ -383,6 +383,32 @@ export function ProjectDetail() {
     }
   }
 
+  const viewLetter = async (record: SignRecord) => {
+    setError(null)
+    try {
+      // Already signed via the real signer flow: show the actual stored signed PDF, not a
+      // rebuilt one. Auto-populate records reuse 'submitted' as a lightweight "downloaded"
+      // flag (see markSubmitted) and never get a real signed_pdf, so always rebuild those.
+      if (!isAutoPopulate && (record.status === 'submitted' || record.status === 'completed')) {
+        const { base64 } = await api.getSignedPdf(record.id)
+        window.open(URL.createObjectURL(new Blob([base64ToArrayBuffer(base64) as BlobPart], { type: 'application/pdf' })), '_blank')
+        return
+      }
+      if (!template?.has_template) return setError('Upload a template PDF first.')
+      const { base64 } = await api.getTemplate(template.id)
+      const formFields = template.fields
+      const customVals = record.custom_values
+      const values = formFields
+        .filter((f) => f.custom_field_id && customVals.some((v) => v.field_id === f.custom_field_id && v.value))
+        .map((f) => ({ field_id: f.id, value: customVals.find((v) => v.field_id === f.custom_field_id)!.value }))
+      const templateBytes = base64ToArrayBuffer(base64)
+      const bytes = await buildSignedPdf(templateBytes, formFields, values)
+      window.open(URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' })), '_blank')
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   if (loading) return <p className="text-cti-gray">Loading...</p>
   if (!project) return <p className="text-cti-red">Project not found.</p>
 
@@ -392,8 +418,8 @@ export function ProjectDetail() {
       {error && <p className="mb-4 rounded-md border border-cti-red/20 bg-red-50 p-3 text-sm text-cti-red">{error}</p>}
       <div className="mb-6 overflow-x-auto border-b border-cti-line"><div className="flex min-w-max gap-2">{tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setSearchParams(tab.id === 'template' ? {} : { tab: tab.id })} className={`border-b-2 px-4 py-3 text-left transition-colors ${activeTab === tab.id ? 'border-cti-red text-cti-black' : 'border-transparent text-cti-gray hover:text-cti-ink'}`}><span className="block text-sm font-bold">{tab.label}</span></button>)}</div></div>
       {activeTab === 'template' && <TemplateTab projectId={projectId!} template={template} customFields={customFields} ensureTemplate={ensureTemplate} renameTemplate={renameTemplate} deleteTemplate={deleteTemplate} fieldsManagerProps={{ customFields, newFieldLabel, setNewFieldLabel, newFieldType, setNewFieldType, newFieldRequired, setNewFieldRequired, newFieldShow, setNewFieldShow, newFieldPrefix, setNewFieldPrefix, newFieldStart, setNewFieldStart, newFieldOptions, setNewFieldOptions, editingFieldId, editFieldLabel, setEditFieldLabel, editFieldType, setEditFieldType, editFieldRequired, setEditFieldRequired, editFieldShow, setEditFieldShow, editFieldPrefix, setEditFieldPrefix, editFieldStart, setEditFieldStart, editFieldOptions, setEditFieldOptions, createCustomField, beginEditField, saveFieldEdit, cancelFieldEdit: () => setEditingFieldId(null), deleteCustomField, toggleFieldVisible, moveCustomField }} />}
-      {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} markSubmitted={markSubmitted} sendOne={sendOne} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} saveCustomValues={saveRecordCustomValues} openPanel={setPanel} />}
-      {activeTab === 'completed' && <CompletedTab isAutoPopulate={isAutoPopulate} records={completedRecords} visibleFields={visibleFields} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} saveCustomValues={saveRecordCustomValues} />}
+      {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} markSubmitted={markSubmitted} sendOne={sendOne} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} openPanel={setPanel} />}
+      {activeTab === 'completed' && <CompletedTab isAutoPopulate={isAutoPopulate} records={completedRecords} visibleFields={visibleFields} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} />}
       {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} project={project} updateProject={updateProject} />}
       {panel === 'add' && <RecordPanel title="Add record" onClose={() => setPanel(null)}><RecordForm isAutoPopulate={isAutoPopulate} template={template} signerName={signerName} setSignerName={setSignerName} signerEmail={signerEmail} setSignerEmail={setSignerEmail} message={message} setMessage={setMessage} customFields={customFields} customValues={customValues} setCustomValues={setCustomValues} createRecord={createRecord} /></RecordPanel>}
       {panel === 'import' && <RecordPanel title="Import records" onClose={() => setPanel(null)}><ImportPanel importText={importText} setImportText={setImportText} importRecords={importRecords} isAutoPopulate={isAutoPopulate} /></RecordPanel>}
@@ -477,12 +503,12 @@ function ProjectSettingTab({ projectId, project, updateProject }: { projectId: s
   )
 }
 
-function FormTab(props: { isAutoPopulate: boolean; template?: Form; records: SignRecord[]; visibleFields: ProjectCustomField[]; selectedRecords: Record<string, boolean>; setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>; massMarkSent: () => void; deleteRecord: (recordId: string) => void; markComplete: (recordId: string) => void; markSubmitted: (recordId: string) => void; sendOne: (recordId: string) => void; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void>; openPanel: (mode: PanelMode) => void }) {
-  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-heading text-lg font-bold text-cti-black">Records</h2><p className="text-sm text-cti-gray">{props.template?.has_template ? 'Table uses visible columns from the Template tab. Cell values save inline; use the action icons for send, timeline, letter, reminder, complete and delete.' : 'Create and map a template before adding records.'}</p></div><div className="flex gap-2"><button className="btn-ghost" onClick={() => props.openPanel('import')} disabled={!props.template?.has_template}>Import records</button><button className="btn-primary" onClick={() => props.openPanel('add')} disabled={!props.template?.has_template}>+ Add record</button>{!props.isAutoPopulate && <button className="btn-dark" onClick={props.massMarkSent}>Mass send</button>}</div></div><RecordsTable isAutoPopulate={props.isAutoPopulate} records={props.records} fields={props.visibleFields} selectedRecords={props.selectedRecords} setSelectedRecords={props.setSelectedRecords} deleteRecord={props.deleteRecord} markComplete={props.markComplete} markSubmitted={props.markSubmitted} sendOne={props.sendOne} downloadPdf={props.downloadPdf} downloadSignedPdf={props.downloadSignedPdf} saveCustomValues={props.saveCustomValues} completed={false} /></section>
+function FormTab(props: { isAutoPopulate: boolean; template?: Form; records: SignRecord[]; visibleFields: ProjectCustomField[]; selectedRecords: Record<string, boolean>; setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>; massMarkSent: () => void; deleteRecord: (recordId: string) => void; markComplete: (recordId: string) => void; markSubmitted: (recordId: string) => void; sendOne: (recordId: string) => void; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; viewLetter: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void>; openPanel: (mode: PanelMode) => void }) {
+  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-heading text-lg font-bold text-cti-black">Records</h2><p className="text-sm text-cti-gray">{props.template?.has_template ? 'Table uses visible columns from the Template tab. Cell values save inline; use the action icons for send, timeline, letter, reminder, complete and delete.' : 'Create and map a template before adding records.'}</p></div><div className="flex gap-2"><button className="btn-ghost" onClick={() => props.openPanel('import')} disabled={!props.template?.has_template}>Import records</button><button className="btn-primary" onClick={() => props.openPanel('add')} disabled={!props.template?.has_template}>+ Add record</button>{!props.isAutoPopulate && <button className="btn-dark" onClick={props.massMarkSent}>Mass send</button>}</div></div><RecordsTable isAutoPopulate={props.isAutoPopulate} records={props.records} fields={props.visibleFields} selectedRecords={props.selectedRecords} setSelectedRecords={props.setSelectedRecords} deleteRecord={props.deleteRecord} markComplete={props.markComplete} markSubmitted={props.markSubmitted} sendOne={props.sendOne} downloadPdf={props.downloadPdf} downloadSignedPdf={props.downloadSignedPdf} viewLetter={props.viewLetter} saveCustomValues={props.saveCustomValues} completed={false} /></section>
 }
 
-function CompletedTab({ isAutoPopulate, records, visibleFields, downloadPdf, downloadSignedPdf, saveCustomValues }: { isAutoPopulate: boolean; records: SignRecord[]; visibleFields: ProjectCustomField[]; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void> }) {
-  return <section><h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Completed</h2><RecordsTable isAutoPopulate={isAutoPopulate} records={records} fields={visibleFields} selectedRecords={{}} setSelectedRecords={() => {}} deleteRecord={() => {}} markComplete={() => {}} markSubmitted={() => {}} sendOne={() => {}} downloadPdf={downloadPdf} downloadSignedPdf={downloadSignedPdf} saveCustomValues={saveCustomValues} completed /></section>
+function CompletedTab({ isAutoPopulate, records, visibleFields, downloadPdf, downloadSignedPdf, viewLetter, saveCustomValues }: { isAutoPopulate: boolean; records: SignRecord[]; visibleFields: ProjectCustomField[]; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; viewLetter: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void> }) {
+  return <section><h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Completed</h2><RecordsTable isAutoPopulate={isAutoPopulate} records={records} fields={visibleFields} selectedRecords={{}} setSelectedRecords={() => {}} deleteRecord={() => {}} markComplete={() => {}} markSubmitted={() => {}} sendOne={() => {}} downloadPdf={downloadPdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveCustomValues} completed /></section>
 }
 
 type SettingTabProps = { customFields: ProjectCustomField[]; newFieldLabel: string; setNewFieldLabel: (value: string) => void; newFieldType: CustomFieldType; setNewFieldType: (value: CustomFieldType) => void; newFieldRequired: boolean; setNewFieldRequired: (value: boolean) => void; newFieldShow: boolean; setNewFieldShow: (value: boolean) => void; newFieldPrefix: string; setNewFieldPrefix: (value: string) => void; newFieldStart: number; setNewFieldStart: (value: number) => void; newFieldOptions: string; setNewFieldOptions: (value: string) => void; editingFieldId: string | null; editFieldLabel: string; setEditFieldLabel: (value: string) => void; editFieldType: CustomFieldType; setEditFieldType: (value: CustomFieldType) => void; editFieldRequired: boolean; setEditFieldRequired: (value: boolean) => void; editFieldShow: boolean; setEditFieldShow: (value: boolean) => void; editFieldPrefix: string; setEditFieldPrefix: (value: string) => void; editFieldStart: number; setEditFieldStart: (value: number) => void; editFieldOptions: string; setEditFieldOptions: (value: string) => void; createCustomField: (e: React.FormEvent) => void; beginEditField: (field: ProjectCustomField) => void; saveFieldEdit: (fieldId: string) => void; cancelFieldEdit: () => void; deleteCustomField: (fieldId: string) => void; toggleFieldVisible: (field: ProjectCustomField) => void; moveCustomField: (fieldId: string, direction: -1 | 1) => void }
@@ -550,6 +576,7 @@ type RecordsTableProps = {
   sendOne: (recordId: string) => void
   downloadPdf: (record: SignRecord) => void
   downloadSignedPdf: (record: SignRecord) => void
+  viewLetter: (record: SignRecord) => void
   saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void>
   completed: boolean
 }
@@ -622,7 +649,7 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
           {!props.completed && props.isAutoPopulate && record.status !== 'draft' && <SendButton label="Complete" onClick={() => props.markComplete(record.id)} />}
           {dirty && <RowActionIcon label="Save changes" tone="save" onClick={save} disabled={saving}><SaveIcon /></RowActionIcon>}
           {!props.isAutoPopulate && <TimelineButton record={record} open={showTimeline} onToggle={() => setShowTimeline((v) => !v)} />}
-          <RowActionIcon label="Open signing letter" tone="letter" onClick={() => window.open(signUrlFor(record), '_blank')}><LetterIcon /></RowActionIcon>
+          <RowActionIcon label="View letter" tone="letter" onClick={() => props.viewLetter(record)}><LetterIcon /></RowActionIcon>
           {!props.completed && !props.isAutoPopulate && <RowActionIcon label="Send reminder" tone="reminder" onClick={() => props.sendOne(record.id)}><BellIcon /></RowActionIcon>}
           {props.completed && props.isAutoPopulate && <RowActionIcon label="Download PDF" tone="neutral" onClick={() => props.downloadPdf(record)}><DownloadIcon /></RowActionIcon>}
           {props.completed && !props.isAutoPopulate && <RowActionIcon label="Download signed PDF" tone="neutral" onClick={() => props.downloadSignedPdf(record)}><DownloadIcon /></RowActionIcon>}
@@ -645,10 +672,6 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
 function valuesFromRecord(record: SignRecord, fields: ProjectCustomField[]) {
   const byField = Object.fromEntries(record.custom_values.map((v) => [v.field_id, v.value ?? '']))
   return Object.fromEntries(fields.map((field) => [field.id, byField[field.id] ?? '']))
-}
-
-function signUrlFor(record: SignRecord) {
-  return `${window.location.origin}${import.meta.env.BASE_URL}sign/${record.token}`
 }
 
 function TimelineButton({ record, open, onToggle }: { record: SignRecord; open: boolean; onToggle: () => void }) {

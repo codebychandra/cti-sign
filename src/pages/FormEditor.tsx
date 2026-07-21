@@ -256,16 +256,6 @@ export function FormEditor() {
 
   const updateField = (id: string, patch: Partial<LocalField>) => setFieldsWithHistory((prev) => prev.map((f) => (f.id === id ? normalizeField({ ...f, ...patch }) : f)))
   const updateSelectedFields = (patcher: (field: LocalField) => Partial<LocalField>) => setFieldsWithHistory((prev) => prev.map((field) => selectedIds.includes(field.id) ? normalizeField({ ...field, ...patcher(field) }) : field))
-  const mapFieldToCustom = (fieldId: string, customFieldId: string) => {
-    const match = customFields.find((cf) => cf.id === customFieldId)
-    const mappedType = match ? typeForCustomFieldType(match.type) : null
-    updateField(fieldId, {
-      custom_field_id: customFieldId || null,
-      label: match?.label ?? fields.find((f) => f.id === fieldId)?.label ?? '',
-      ...(mappedType ? { type: mappedType } : {}),
-    })
-  }
-
   const moveField = (id: string, nx: number, ny: number) => {
     setFields((prev) => {
       const anchor = prev.find((field) => field.id === id)
@@ -338,33 +328,7 @@ export function FormEditor() {
         </div></aside>
       </div>
     )}
-    {pdfBytes && <FieldMappingList fields={fields} customFields={customFields} onMap={mapFieldToCustom} />}
   </>
-}
-
-function FieldMappingList({ fields, customFields, onMap }: { fields: LocalField[]; customFields: ProjectCustomField[]; onMap: (fieldId: string, customFieldId: string) => void }) {
-  const mappable = fields.filter((f) => !['signature', 'initials'].includes(f.type)).sort((a, b) => a.sort_order - b.sort_order)
-  if (!mappable.length) return null
-  return (
-    <div className="card mt-6 p-5">
-      <h2 className="font-heading text-base font-bold text-cti-black">Map Fields to Record Columns</h2>
-      <p className="mt-1 text-sm text-cti-gray">
-        Each number here matches the number badge on the same field on the PDF above. Pick which record column
-        auto-fills each one — the rest stay blank for the signer or auto-populate to type in.
-      </p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {mappable.map((f) => (
-          <div key={f.id} className="flex items-center gap-2 rounded-md border border-cti-line p-2">
-            <span className="w-12 shrink-0 text-xs font-semibold text-cti-gray">#{f.sort_order + 1}</span>
-            <select className="input py-1 text-xs" value={f.custom_field_id ?? ''} onChange={(e) => onMap(f.id, e.target.value)}>
-              <option value="">Signer/Manual Field</option>
-              {customFields.map((cf) => <option key={cf.id} value={cf.id}>{cf.label}</option>)}
-            </select>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 function FieldInspector({ field, customFields, onChange, onDelete }: { field: LocalField; customFields: ProjectCustomField[]; onChange: (p: Partial<LocalField>) => void; onDelete: () => void }) {

@@ -72,6 +72,15 @@ export async function buildSignedPdf(templateBytes: ArrayBuffer, fields: FormFie
     }
   }
 
+  // Fillable templates keep their own AcroForm fields underneath the values
+  // we just drew, so the download would still look/behave like an editable
+  // form. Flatten it so the burned-in text/signatures are the only thing left.
+  try {
+    pdf.getForm().flatten()
+  } catch {
+    // No AcroForm on this template — nothing to flatten.
+  }
+
   return pdf.save()
 }
 

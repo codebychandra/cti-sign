@@ -508,13 +508,11 @@ function ProjectSettingTab({ projectId, project, updateProject }: { projectId: s
             ))}
           </div>
         </div>
-        {projectType === 'sent_signature' && (
-          <div>
-            <label className="label">Message Template (Sent to Crew)</label>
-            <textarea className="input min-h-24" value={messageTemplate} onChange={(e) => setMessageTemplate(e.target.value)} placeholder={getAppSettings().defaultSignatureMessage} />
-            <p className="mt-1 text-xs text-cti-gray">Pre-fills the message when sending a signature request for this project. Leave blank to use the app-wide default from Settings.</p>
-          </div>
-        )}
+        <div>
+          <label className="label">Message Template (Sent to Crew)</label>
+          <textarea className="input min-h-24" value={messageTemplate} onChange={(e) => setMessageTemplate(e.target.value)} placeholder={getAppSettings().defaultSignatureMessage} />
+          <p className="mt-1 text-xs text-cti-gray">Pre-fills the message when sending a signature request for this project. Leave blank to use the app-wide default from Settings.</p>
+        </div>
         <div className="flex items-center gap-3">
           <button className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
           {saved && <span className="text-sm font-semibold text-cti-ink">Saved</span>}

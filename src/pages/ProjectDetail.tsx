@@ -547,7 +547,7 @@ function RecordsTable(props: RecordsTableProps) {
   return (
     <div className="card overflow-x-auto p-0">
       <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-cti-black text-xs uppercase tracking-wide text-white">
+        <thead className="border-b border-cti-line bg-cti-bg text-xs uppercase tracking-wide text-cti-gray">
           <tr>
             <th className="whitespace-nowrap px-4 py-3">Action</th>
             <th className="whitespace-nowrap px-4 py-3">Created</th>

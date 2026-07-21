@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
-import type { FieldType, Form, FormField, ProjectCustomField, TextAlign } from '../lib/types'
+import type { CustomFieldType, FieldType, Form, FormField, ProjectCustomField, TextAlign } from '../lib/types'
 import { detectFormFields, getPageCount, renderPage, type DetectedField } from '../lib/pdf'
 import { PageHeader } from '../components/Layout'
 
@@ -24,6 +24,16 @@ type VerticalAlign = 'top' | 'middle' | 'bottom'
 
 function defaultFontSize(type: FieldType) {
   return type === 'signature' || type === 'initials' ? 18 : 11
+}
+
+// When a template field gets mapped to a project custom field, its own
+// input type should follow suit — otherwise a field mapped to a Date column
+// keeps rendering as a plain text box for the signer instead of a date picker.
+function typeForCustomFieldType(customType: CustomFieldType): FieldType | null {
+  if (customType === 'date') return 'date'
+  if (customType === 'number') return 'number'
+  if (customType === 'email') return 'email'
+  return null
 }
 
 function normalizeField(field: LocalField): LocalField {
@@ -248,7 +258,12 @@ export function FormEditor() {
   const updateSelectedFields = (patcher: (field: LocalField) => Partial<LocalField>) => setFieldsWithHistory((prev) => prev.map((field) => selectedIds.includes(field.id) ? normalizeField({ ...field, ...patcher(field) }) : field))
   const mapFieldToCustom = (fieldId: string, customFieldId: string) => {
     const match = customFields.find((cf) => cf.id === customFieldId)
-    updateField(fieldId, { custom_field_id: customFieldId || null, label: match?.label ?? fields.find((f) => f.id === fieldId)?.label ?? '' })
+    const mappedType = match ? typeForCustomFieldType(match.type) : null
+    updateField(fieldId, {
+      custom_field_id: customFieldId || null,
+      label: match?.label ?? fields.find((f) => f.id === fieldId)?.label ?? '',
+      ...(mappedType ? { type: mappedType } : {}),
+    })
   }
 
   const moveField = (id: string, nx: number, ny: number) => {
@@ -358,7 +373,7 @@ function FieldInspector({ field, customFields, onChange, onDelete }: { field: Lo
   const alignFieldVertical = (align: VerticalAlign) => { if (align === 'top') onChange({ y: 0 }); if (align === 'middle') onChange({ y: clamp((1 - field.height) / 2, 0, 1 - field.height) }); if (align === 'bottom') onChange({ y: clamp(1 - field.height, 0, 1 - field.height) }) }
   const fontSize = field.font_size ?? defaultFontSize(field.type)
   const canMapCustom = !['signature', 'initials', 'signed_date'].includes(field.type)
-  return <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Selected: {fieldLabel(field.type)}</p><label className="label mt-2">Label</label><input className="input" value={field.label} onChange={(e) => onChange({ label: e.target.value })} />{canMapCustom && <div className="mt-3"><label className="label">Mapped record column</label><select className="input" value={field.custom_field_id ?? ''} onChange={(e) => { const match = customFields.find((customField) => customField.id === e.target.value); onChange({ custom_field_id: e.target.value || null, label: match?.label ?? field.label }) }}><option value="">Signer/manual field</option>{customFields.map((customField) => <option key={customField.id} value={customField.id}>{customField.label}</option>)}</select></div>}<div className="mt-4 border-t border-cti-line pt-4"><p className="label">Field position</p><div className="grid grid-cols-2 gap-2"><MetricInput label="X" value={field.x} onChange={(value) => setMetric('x', value)} /><MetricInput label="Y" value={field.y} onChange={(value) => setMetric('y', value)} /><MetricInput label="W" value={field.width} onChange={(value) => setMetric('width', value)} /><MetricInput label="H" value={field.height} onChange={(value) => setMetric('height', value)} /></div><div className="mt-2 grid grid-cols-3 gap-1">{TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignField(align)}>{align}</button>)}</div><div className="mt-2 grid grid-cols-3 gap-1">{(['top', 'middle', 'bottom'] as VerticalAlign[]).map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignFieldVertical(align)}>{align}</button>)}</div><button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={() => onChange({ x: 0, width: 1 })}>Full width</button></div><div className="mt-4 border-t border-cti-line pt-4"><p className="label">Text style</p><label className="label mt-2">Text align</label><select className="input" value={field.text_align ?? 'left'} onChange={(e) => onChange({ text_align: e.target.value as TextAlign })}>{TEXT_ALIGN.map((align) => <option key={align} value={align}>{align}</option>)}</select><label className="label mt-2">Text size</label><div className="flex items-center gap-2"><input className="input" type="number" min={6} max={72} step={1} value={fontSize} onChange={(e) => onChange({ font_size: clamp(Number(e.target.value) || defaultFontSize(field.type), 6, 72) })} /><span className="text-xs text-cti-gray">pt</span></div></div><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={field.required} onChange={(e) => onChange({ required: e.target.checked })} />Required</label><button className="btn-ghost mt-3 w-full text-cti-red" onClick={onDelete}>Delete field</button></div>
+  return <div className="mt-4 border-t border-cti-line pt-4"><p className="label">Selected: {fieldLabel(field.type)}</p><label className="label mt-2">Label</label><input className="input" value={field.label} onChange={(e) => onChange({ label: e.target.value })} />{canMapCustom && <div className="mt-3"><label className="label">Mapped record column</label><select className="input" value={field.custom_field_id ?? ''} onChange={(e) => { const match = customFields.find((customField) => customField.id === e.target.value); const mappedType = match ? typeForCustomFieldType(match.type) : null; onChange({ custom_field_id: e.target.value || null, label: match?.label ?? field.label, ...(mappedType ? { type: mappedType } : {}) }) }}><option value="">Signer/manual field</option>{customFields.map((customField) => <option key={customField.id} value={customField.id}>{customField.label}</option>)}</select></div>}<div className="mt-4 border-t border-cti-line pt-4"><p className="label">Field position</p><div className="grid grid-cols-2 gap-2"><MetricInput label="X" value={field.x} onChange={(value) => setMetric('x', value)} /><MetricInput label="Y" value={field.y} onChange={(value) => setMetric('y', value)} /><MetricInput label="W" value={field.width} onChange={(value) => setMetric('width', value)} /><MetricInput label="H" value={field.height} onChange={(value) => setMetric('height', value)} /></div><div className="mt-2 grid grid-cols-3 gap-1">{TEXT_ALIGN.map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignField(align)}>{align}</button>)}</div><div className="mt-2 grid grid-cols-3 gap-1">{(['top', 'middle', 'bottom'] as VerticalAlign[]).map((align) => <button key={align} type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => alignFieldVertical(align)}>{align}</button>)}</div><button type="button" className="btn-ghost mt-2 w-full px-2 py-1 text-xs" onClick={() => onChange({ x: 0, width: 1 })}>Full width</button></div><div className="mt-4 border-t border-cti-line pt-4"><p className="label">Text style</p><label className="label mt-2">Text align</label><select className="input" value={field.text_align ?? 'left'} onChange={(e) => onChange({ text_align: e.target.value as TextAlign })}>{TEXT_ALIGN.map((align) => <option key={align} value={align}>{align}</option>)}</select><label className="label mt-2">Text size</label><div className="flex items-center gap-2"><input className="input" type="number" min={6} max={72} step={1} value={fontSize} onChange={(e) => onChange({ font_size: clamp(Number(e.target.value) || defaultFontSize(field.type), 6, 72) })} /><span className="text-xs text-cti-gray">pt</span></div></div><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={field.required} onChange={(e) => onChange({ required: e.target.checked })} />Required</label><button className="btn-ghost mt-3 w-full text-cti-red" onClick={onDelete}>Delete field</button></div>
 }
 
 function MultiFieldInspector({ count, onAlign, onVerticalAlign, onFullWidth, onDelete }: { count: number; onAlign: (align: TextAlign) => void; onVerticalAlign: (align: VerticalAlign) => void; onFullWidth: () => void; onDelete: () => void }) {

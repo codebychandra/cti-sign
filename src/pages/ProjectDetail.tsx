@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { getAppSettings } from '../lib/settings'
@@ -366,12 +366,12 @@ function CompletedTab({ isAutoPopulate, records, visibleFields, recordValues }: 
 type SettingTabProps = { customFields: ProjectCustomField[]; newFieldLabel: string; setNewFieldLabel: (value: string) => void; newFieldType: CustomFieldType; setNewFieldType: (value: CustomFieldType) => void; newFieldRequired: boolean; setNewFieldRequired: (value: boolean) => void; newFieldShow: boolean; setNewFieldShow: (value: boolean) => void; newFieldPrefix: string; setNewFieldPrefix: (value: string) => void; newFieldStart: number; setNewFieldStart: (value: number) => void; newFieldOptions: string; setNewFieldOptions: (value: string) => void; editingFieldId: string | null; editFieldLabel: string; setEditFieldLabel: (value: string) => void; editFieldType: CustomFieldType; setEditFieldType: (value: CustomFieldType) => void; editFieldRequired: boolean; setEditFieldRequired: (value: boolean) => void; editFieldShow: boolean; setEditFieldShow: (value: boolean) => void; editFieldPrefix: string; setEditFieldPrefix: (value: string) => void; editFieldStart: number; setEditFieldStart: (value: number) => void; editFieldOptions: string; setEditFieldOptions: (value: string) => void; createCustomField: (e: React.FormEvent) => void; beginEditField: (field: ProjectCustomField) => void; saveFieldEdit: (fieldId: string) => void; cancelFieldEdit: () => void; deleteCustomField: (fieldId: string) => void; toggleFieldVisible: (field: ProjectCustomField) => void; moveCustomField: (fieldId: string, direction: -1 | 1) => void }
 
 function SettingTab(props: SettingTabProps) {
-  return <section className="space-y-4"><div><h2 className="font-heading text-lg font-bold text-cti-black">Input fields</h2><p className="text-sm text-cti-gray">Define fields here, then map them onto the PDF above. They also appear on the Form and Completed tabs.</p></div><form onSubmit={props.createCustomField} className="card grid gap-4 p-5 lg:grid-cols-[1fr_190px_140px_120px_auto_auto_auto]"><div><label className="label">Field label</label><input className="input" value={props.newFieldLabel} onChange={(e) => props.setNewFieldLabel(e.target.value)} /></div><div><label className="label">Type</label><FieldTypeSelect value={props.newFieldType} onChange={props.setNewFieldType} /></div>{props.newFieldType === 'auto_number' ? <><div><label className="label">Prefix</label><input className="input" value={props.newFieldPrefix} onChange={(e) => props.setNewFieldPrefix(e.target.value)} placeholder="CTI-" /></div><div><label className="label">Start from</label><input className="input" type="number" min={1} value={props.newFieldStart} onChange={(e) => props.setNewFieldStart(Number(e.target.value) || 1)} /></div></> : <><div></div><div></div></>}<label className="mt-7 flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.newFieldRequired} onChange={(e) => props.setNewFieldRequired(e.target.checked)} disabled={props.newFieldType === 'auto_number'} />Required</label><label className="mt-7 flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.newFieldShow} onChange={(e) => props.setNewFieldShow(e.target.checked)} />Show in form table</label><button className="btn-dark mt-6">+ Add</button>{isDropdownType(props.newFieldType) && <div className="lg:col-span-7"><label className="label">Options</label><textarea className="input" rows={4} value={props.newFieldOptions} onChange={(e) => props.setNewFieldOptions(e.target.value)} placeholder="One option per line or separated by comma" /></div>}</form><div className="space-y-2">{props.customFields.length === 0 && <EmptyState text="No custom fields yet." />}{props.customFields.map((field, index) => <FieldRow key={field.id} field={field} index={index} total={props.customFields.length} {...props} />)}</div></section>
+  return <section className="space-y-4"><div><h2 className="font-heading text-lg font-bold text-cti-black">Input fields</h2><p className="text-sm text-cti-gray">Define fields here, then map them onto the PDF above. They also appear on the Form and Completed tabs.</p></div><form onSubmit={props.createCustomField} className="card grid gap-4 p-5 lg:grid-cols-[1fr_190px_140px_120px_auto_auto_auto]"><div><label className="label">Field label</label><input className="input" value={props.newFieldLabel} onChange={(e) => props.setNewFieldLabel(e.target.value)} /></div><div><label className="label">Type</label><FieldTypeSelect value={props.newFieldType} onChange={props.setNewFieldType} /></div>{props.newFieldType === 'auto_number' ? <><div><label className="label">Prefix</label><input className="input" value={props.newFieldPrefix} onChange={(e) => props.setNewFieldPrefix(e.target.value)} placeholder="CTI-" /></div><div><label className="label">Start from</label><input className="input" type="number" min={1} value={props.newFieldStart} onChange={(e) => props.setNewFieldStart(Number(e.target.value) || 1)} /></div></> : <><div></div><div></div></>}<label className="mt-7 flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.newFieldRequired} onChange={(e) => props.setNewFieldRequired(e.target.checked)} disabled={props.newFieldType === 'auto_number'} />Required</label><label className="mt-7 flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.newFieldShow} onChange={(e) => props.setNewFieldShow(e.target.checked)} />Show in form table</label><button className="btn-dark mt-6">+ Add</button>{isDropdownType(props.newFieldType) && <div className="lg:col-span-7"><OptionListEditor value={props.newFieldOptions} onChange={props.setNewFieldOptions} /></div>}</form><div className="space-y-2">{props.customFields.length === 0 && <EmptyState text="No custom fields yet." />}{props.customFields.map((field, index) => <FieldRow key={field.id} field={field} index={index} total={props.customFields.length} {...props} />)}</div></section>
 }
 
 function FieldRow(props: SettingTabProps & { field: ProjectCustomField; index: number; total: number }) {
   const field = props.field
-  if (props.editingFieldId === field.id) return <div className="card grid gap-3 p-4 lg:grid-cols-[1fr_190px_140px_120px_auto_auto_auto]"><input className="input" value={props.editFieldLabel} onChange={(e) => props.setEditFieldLabel(e.target.value)} /><FieldTypeSelect value={props.editFieldType} onChange={props.setEditFieldType} />{props.editFieldType === 'auto_number' ? <><input className="input" value={props.editFieldPrefix} onChange={(e) => props.setEditFieldPrefix(e.target.value)} placeholder="Prefix" /><input className="input" type="number" min={1} value={props.editFieldStart} onChange={(e) => props.setEditFieldStart(Number(e.target.value) || 1)} /></> : <><div></div><div></div></>}<label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.editFieldRequired} onChange={(e) => props.setEditFieldRequired(e.target.checked)} disabled={props.editFieldType === 'auto_number'} />Required</label><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.editFieldShow} onChange={(e) => props.setEditFieldShow(e.target.checked)} />Show in table</label><div className="flex gap-2"><button type="button" className="btn-primary" onClick={() => props.saveFieldEdit(field.id)}>Save</button><button type="button" className="btn-ghost" onClick={props.cancelFieldEdit}>Cancel</button></div>{isDropdownType(props.editFieldType) && <div className="lg:col-span-7"><label className="label">Options</label><textarea className="input" rows={4} value={props.editFieldOptions} onChange={(e) => props.setEditFieldOptions(e.target.value)} placeholder="One option per line or separated by comma" /></div>}</div>
+  if (props.editingFieldId === field.id) return <div className="card grid gap-3 p-4 lg:grid-cols-[1fr_190px_140px_120px_auto_auto_auto]"><input className="input" value={props.editFieldLabel} onChange={(e) => props.setEditFieldLabel(e.target.value)} /><FieldTypeSelect value={props.editFieldType} onChange={props.setEditFieldType} />{props.editFieldType === 'auto_number' ? <><input className="input" value={props.editFieldPrefix} onChange={(e) => props.setEditFieldPrefix(e.target.value)} placeholder="Prefix" /><input className="input" type="number" min={1} value={props.editFieldStart} onChange={(e) => props.setEditFieldStart(Number(e.target.value) || 1)} /></> : <><div></div><div></div></>}<label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.editFieldRequired} onChange={(e) => props.setEditFieldRequired(e.target.checked)} disabled={props.editFieldType === 'auto_number'} />Required</label><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={props.editFieldShow} onChange={(e) => props.setEditFieldShow(e.target.checked)} />Show in table</label><div className="flex gap-2"><button type="button" className="btn-primary" onClick={() => props.saveFieldEdit(field.id)}>Save</button><button type="button" className="btn-ghost" onClick={props.cancelFieldEdit}>Cancel</button></div>{isDropdownType(props.editFieldType) && <div className="lg:col-span-7"><OptionListEditor value={props.editFieldOptions} onChange={props.setEditFieldOptions} /></div>}</div>
   return <div className="card flex items-center justify-between gap-3 p-4"><div><p className="font-semibold text-cti-ink">{field.label}</p><p className="text-xs text-cti-gray">{fieldSummary(field)}</p></div><div className="flex flex-wrap justify-end gap-2"><button className="btn-ghost px-2 py-1 text-xs" type="button" disabled={props.index === 0} onClick={() => props.moveCustomField(field.id, -1)}>Up</button><button className="btn-ghost px-2 py-1 text-xs" type="button" disabled={props.index === props.total - 1} onClick={() => props.moveCustomField(field.id, 1)}>Down</button><button className="btn-ghost px-2 py-1 text-xs" type="button" onClick={() => props.toggleFieldVisible(field)}>{field.show_in_table ? 'Hide' : 'Show'}</button><button className="btn-ghost px-2 py-1 text-xs" type="button" onClick={() => props.beginEditField(field)}>Edit</button><button className="btn-ghost px-2 py-1 text-xs text-cti-red" type="button" onClick={() => props.deleteCustomField(field.id)}>Delete</button></div></div>
 }
 
@@ -455,6 +455,90 @@ function isDropdownType(type: CustomFieldType) {
 
 function optionTextToList(text: string) {
   return text.split(/\r?\n|,/).map((value) => value.trim()).filter(Boolean)
+}
+
+function OptionListEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  // Real local state, not derived fresh from `value` on every render: joining
+  // an array containing exactly one blank entry with '\n' produces the same
+  // '' as an empty array, so a naive derive-from-string approach can never
+  // let a freshly-added blank row survive long enough to be typed into.
+  // `lastEmitted` distinguishes "value changed because we just sent it up"
+  // from "value changed because the parent reset it externally" (e.g. after
+  // a successful create, or switching which field is being edited).
+  const [options, setOptionsState] = useState<string[]>(() => (value ? optionTextToList(value) : []))
+  const lastEmitted = useRef(value)
+
+  useEffect(() => {
+    if (value !== lastEmitted.current) {
+      setOptionsState(value ? optionTextToList(value) : [])
+      lastEmitted.current = value
+    }
+  }, [value])
+
+  const setOptions = (next: string[]) => {
+    setOptionsState(next)
+    const joined = next.join('\n')
+    lastEmitted.current = joined
+    onChange(joined)
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <label className="label mb-0">Pick List Option</label>
+        <button type="button" className="text-xs font-semibold text-cti-gray hover:text-cti-ink" onClick={() => setOptions([...options].sort((a, b) => a.localeCompare(b)))}>
+          Sort A-Z
+        </button>
+      </div>
+      <div className="mt-2 space-y-2 rounded-md bg-cti-bg p-2">
+        {options.length === 0 && <p className="p-2 text-xs text-cti-gray">No options yet.</p>}
+        {options.map((option, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              className="input flex-1 bg-white"
+              value={option}
+              onChange={(e) => setOptions(options.map((o, idx) => (idx === i ? e.target.value : o)))}
+            />
+            <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => setOptions(options.filter((_, idx) => idx !== i))}>
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        <button type="button" className="text-xs font-semibold text-cti-red hover:underline" onClick={() => setOptions([...options, ''])}>
+          + Add option
+        </button>
+        <button type="button" className="text-xs font-semibold text-cti-blue hover:underline" onClick={() => setBulkMode((v) => !v)}>
+          {bulkMode ? 'Cancel bulk add' : '+ Add Options in Bulk'}
+        </button>
+      </div>
+      {bulkMode && (
+        <div className="mt-2 space-y-2 rounded-md border border-cti-line p-2">
+          <textarea
+            className="input"
+            rows={4}
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder="One option per line or separated by comma"
+          />
+          <button
+            type="button"
+            className="btn-dark px-3 py-1.5 text-xs"
+            onClick={() => {
+              setOptions([...options, ...optionTextToList(bulkText)])
+              setBulkText('')
+              setBulkMode(false)
+            }}
+          >
+            Add to list
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function normalizeOptions(value: unknown): string[] {

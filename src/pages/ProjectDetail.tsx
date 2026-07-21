@@ -65,7 +65,7 @@ export function ProjectDetail() {
         api.list<SignRecord>('records', { project_id: projectId! }),
         api.list<ProjectCustomField>('custom-fields', { project_id: projectId! }),
       ])
-      setProject({ ...proj, project_type: proj.project_type ?? 'sent_signature' })
+      setProject({ ...proj, project_type: proj.project_type ?? 'sent_signature', message_template: proj.message_template ?? '' })
       setForms(fms.sort((a, b) => a.created_at.localeCompare(b.created_at)))
       setRecords(recs.sort((a, b) => b.created_at.localeCompare(a.created_at)))
       setCustomFields(
@@ -100,7 +100,7 @@ export function ProjectDetail() {
     }
   }
 
-  const updateProject = async (patch: { name: string; description: string; project_type: Project['project_type'] }) => {
+  const updateProject = async (patch: { name: string; description: string; project_type: Project['project_type']; message_template: string }) => {
     if (!projectId) return
     try {
       await api.update('projects', projectId, patch)
@@ -249,10 +249,17 @@ export function ProjectDetail() {
     }
     setSignerName('')
     setSignerEmail('')
-    setMessage(getAppSettings().defaultSignatureMessage)
+    setMessage(defaultMessageForProject())
     setCustomValues({})
     setPanel(null)
     load()
+  }
+
+  const defaultMessageForProject = () => project?.message_template?.trim() || getAppSettings().defaultSignatureMessage
+
+  const openPanel = (mode: PanelMode) => {
+    if (mode === 'add' || mode === 'import') setMessage(defaultMessageForProject())
+    setPanel(mode)
   }
 
   const importRecords = async () => {
@@ -418,7 +425,7 @@ export function ProjectDetail() {
       {error && <p className="mb-4 rounded-md border border-cti-red/20 bg-red-50 p-3 text-sm text-cti-red">{error}</p>}
       <div className="mb-6 overflow-x-auto border-b border-cti-line"><div className="flex min-w-max gap-2">{tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setSearchParams(tab.id === 'template' ? {} : { tab: tab.id })} className={`border-b-2 px-4 py-3 text-left transition-colors ${activeTab === tab.id ? 'border-cti-red text-cti-black' : 'border-transparent text-cti-gray hover:text-cti-ink'}`}><span className="block text-sm font-bold">{tab.label}</span></button>)}</div></div>
       {activeTab === 'template' && <TemplateTab projectId={projectId!} template={template} customFields={customFields} ensureTemplate={ensureTemplate} renameTemplate={renameTemplate} deleteTemplate={deleteTemplate} fieldsManagerProps={{ customFields, newFieldLabel, setNewFieldLabel, newFieldType, setNewFieldType, newFieldRequired, setNewFieldRequired, newFieldShow, setNewFieldShow, newFieldPrefix, setNewFieldPrefix, newFieldStart, setNewFieldStart, newFieldOptions, setNewFieldOptions, editingFieldId, editFieldLabel, setEditFieldLabel, editFieldType, setEditFieldType, editFieldRequired, setEditFieldRequired, editFieldShow, setEditFieldShow, editFieldPrefix, setEditFieldPrefix, editFieldStart, setEditFieldStart, editFieldOptions, setEditFieldOptions, createCustomField, beginEditField, saveFieldEdit, cancelFieldEdit: () => setEditingFieldId(null), deleteCustomField, toggleFieldVisible, moveCustomField }} />}
-      {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} markSubmitted={markSubmitted} sendOne={sendOne} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} openPanel={setPanel} />}
+      {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} markSubmitted={markSubmitted} sendOne={sendOne} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} openPanel={openPanel} />}
       {activeTab === 'completed' && <CompletedTab isAutoPopulate={isAutoPopulate} records={completedRecords} visibleFields={visibleFields} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} />}
       {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} project={project} updateProject={updateProject} />}
       {panel === 'add' && <RecordPanel title="Add record" onClose={() => setPanel(null)}><RecordForm isAutoPopulate={isAutoPopulate} template={template} signerName={signerName} setSignerName={setSignerName} signerEmail={signerEmail} setSignerEmail={setSignerEmail} message={message} setMessage={setMessage} customFields={customFields} customValues={customValues} setCustomValues={setCustomValues} createRecord={createRecord} /></RecordPanel>}
@@ -439,10 +446,11 @@ const projectTypeOptions: { value: Project['project_type']; label: string; descr
   { value: 'auto_populate', label: 'Auto populate', description: 'Map PDF templates and generate documents from record values only.' },
 ]
 
-function ProjectSettingTab({ projectId, project, updateProject }: { projectId: string; project: Project | null; updateProject: (patch: { name: string; description: string; project_type: Project['project_type'] }) => Promise<void> }) {
+function ProjectSettingTab({ projectId, project, updateProject }: { projectId: string; project: Project | null; updateProject: (patch: { name: string; description: string; project_type: Project['project_type']; message_template: string }) => Promise<void> }) {
   const [name, setName] = useState(project?.name ?? '')
   const [description, setDescription] = useState(project?.description ?? '')
   const [projectType, setProjectType] = useState<Project['project_type']>(project?.project_type ?? 'sent_signature')
+  const [messageTemplate, setMessageTemplate] = useState(project?.message_template ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -450,14 +458,15 @@ function ProjectSettingTab({ projectId, project, updateProject }: { projectId: s
     setName(project?.name ?? '')
     setDescription(project?.description ?? '')
     setProjectType(project?.project_type ?? 'sent_signature')
-  }, [project?.id, project?.name, project?.description, project?.project_type])
+    setMessageTemplate(project?.message_template ?? '')
+  }, [project?.id, project?.name, project?.description, project?.project_type, project?.message_template])
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
     setSaving(true)
     try {
-      await updateProject({ name: name.trim(), description: description.trim(), project_type: projectType })
+      await updateProject({ name: name.trim(), description: description.trim(), project_type: projectType, message_template: messageTemplate.trim() })
       setSaved(true)
       window.setTimeout(() => setSaved(false), 1800)
     } catch {
@@ -469,9 +478,9 @@ function ProjectSettingTab({ projectId, project, updateProject }: { projectId: s
   return (
     <div className="max-w-md space-y-6">
       <form onSubmit={save} className="card space-y-4 p-5">
-        <h2 className="font-heading text-lg font-bold text-cti-black">Project details</h2>
+        <h2 className="font-heading text-lg font-bold text-cti-black">Project Details</h2>
         <div>
-          <label className="label">Project name</label>
+          <label className="label">Project Name</label>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
@@ -479,7 +488,7 @@ function ProjectSettingTab({ projectId, project, updateProject }: { projectId: s
           <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
         </div>
         <div>
-          <label className="label">Project type</label>
+          <label className="label">Project Type</label>
           <div className="grid gap-3 sm:grid-cols-2">
             {projectTypeOptions.map((type) => (
               <label key={type.value} className={`rounded-md border p-4 ${projectType === type.value ? 'border-cti-red bg-red-50' : 'border-cti-line bg-white'}`}>
@@ -492,8 +501,15 @@ function ProjectSettingTab({ projectId, project, updateProject }: { projectId: s
             ))}
           </div>
         </div>
+        {projectType === 'sent_signature' && (
+          <div>
+            <label className="label">Message Template (Sent to Crew)</label>
+            <textarea className="input min-h-24" value={messageTemplate} onChange={(e) => setMessageTemplate(e.target.value)} placeholder={getAppSettings().defaultSignatureMessage} />
+            <p className="mt-1 text-xs text-cti-gray">Pre-fills the message when sending a signature request for this project. Leave blank to use the app-wide default from Settings.</p>
+          </div>
+        )}
         <div className="flex items-center gap-3">
-          <button className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          <button className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
           {saved && <span className="text-sm font-semibold text-cti-ink">Saved</span>}
         </div>
       </form>

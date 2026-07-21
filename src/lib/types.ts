@@ -9,6 +9,7 @@ export interface Project {
   name: string
   description: string
   project_type: ProjectType
+  message_template: string
   created_at: string
 }
 

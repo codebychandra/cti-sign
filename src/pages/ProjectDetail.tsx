@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { getAppSettings } from '../lib/settings'
@@ -556,14 +557,14 @@ type RecordsTableProps = {
 function RecordsTable(props: RecordsTableProps) {
   return (
     <div className="card overflow-x-auto p-0">
-      <table className="w-full border-collapse text-left text-sm">
+      <table className="w-full border-collapse text-center text-sm">
         <thead className="border-b border-cti-line bg-cti-bg text-xs uppercase tracking-wide text-cti-gray">
           <tr>
-            <th className="whitespace-nowrap px-4 py-3">Action</th>
-            <th className="whitespace-nowrap px-4 py-3">Status</th>
-            <th className="whitespace-nowrap px-4 py-3">Created</th>
-            {!props.isAutoPopulate && <th className="whitespace-nowrap px-4 py-3">Signer</th>}
-            {props.fields.map((field) => <th key={field.id} className="whitespace-nowrap px-4 py-3">{field.label}</th>)}
+            <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Action</th>
+            <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Status</th>
+            <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Created</th>
+            {!props.isAutoPopulate && <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Signer</th>}
+            {props.fields.map((field, i) => <th key={field.id} className={`whitespace-nowrap px-4 py-3 ${i < props.fields.length - 1 ? 'border-r border-cti-line' : ''}`}>{field.label}</th>)}
           </tr>
         </thead>
         <tbody className="divide-y divide-cti-line">
@@ -608,9 +609,9 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
   }
 
   return (
-    <tr className="align-top hover:bg-cti-bg">
-      <td className="whitespace-nowrap px-4 py-3">
-        <div className="flex w-max flex-nowrap items-center gap-1.5">
+    <tr className="align-middle hover:bg-cti-bg">
+      <td className="whitespace-nowrap border-r border-cti-line px-4 py-3">
+        <div className="mx-auto flex w-max flex-nowrap items-center gap-1.5">
           {!props.completed && !props.isAutoPopulate && (
             <input type="checkbox" className="mr-0.5 h-4 w-4 shrink-0" checked={Boolean(props.selectedRecords[record.id])} onChange={(e) => (props.setSelectedRecords as React.Dispatch<React.SetStateAction<Record<string, boolean>>>)((state) => ({ ...state, [record.id]: e.target.checked }))} />
           )}
@@ -620,27 +621,20 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
           {!props.completed && props.isAutoPopulate && record.status === 'draft' && <SendButton label="Download" onClick={downloadAndAdvance} />}
           {!props.completed && props.isAutoPopulate && record.status !== 'draft' && <SendButton label="Complete" onClick={() => props.markComplete(record.id)} />}
           {dirty && <RowActionIcon label="Save changes" tone="save" onClick={save} disabled={saving}><SaveIcon /></RowActionIcon>}
-          <span className="relative">
-            <RowActionIcon label="Timeline" tone="timeline" onClick={() => setShowTimeline((v) => !v)}><ClockIcon /></RowActionIcon>
-            {showTimeline && (
-              <span className="absolute left-0 top-full z-20 mt-1">
-                <Timeline record={record} />
-              </span>
-            )}
-          </span>
+          {!props.isAutoPopulate && <TimelineButton record={record} open={showTimeline} onToggle={() => setShowTimeline((v) => !v)} />}
           <RowActionIcon label="Open signing letter" tone="letter" onClick={() => window.open(signUrlFor(record), '_blank')}><LetterIcon /></RowActionIcon>
-          {!props.completed && <RowActionIcon label="Send reminder" tone="reminder" onClick={() => props.sendOne(record.id)}><BellIcon /></RowActionIcon>}
+          {!props.completed && !props.isAutoPopulate && <RowActionIcon label="Send reminder" tone="reminder" onClick={() => props.sendOne(record.id)}><BellIcon /></RowActionIcon>}
           {props.completed && props.isAutoPopulate && <RowActionIcon label="Download PDF" tone="neutral" onClick={() => props.downloadPdf(record)}><DownloadIcon /></RowActionIcon>}
           {props.completed && !props.isAutoPopulate && <RowActionIcon label="Download signed PDF" tone="neutral" onClick={() => props.downloadSignedPdf(record)}><DownloadIcon /></RowActionIcon>}
           {props.completed && !props.isAutoPopulate && record.onedrive_url && <RowActionIcon label="Open copy in OneDrive" tone="letter" onClick={() => window.open(record.onedrive_url!, '_blank')}><ExternalLinkIcon /></RowActionIcon>}
           {!props.completed && <RowActionIcon label="Delete record" tone="danger" onClick={() => props.deleteRecord(record.id)}><TrashIcon /></RowActionIcon>}
         </div>
       </td>
-      <td className="px-4 py-3"><StatusBadge status={record.status} /></td>
-      <td className="whitespace-nowrap px-4 py-3 text-cti-gray">{new Date(record.created_at).toLocaleDateString()}</td>
-      {!props.isAutoPopulate && <td className="px-4 py-3"><p className="font-semibold text-cti-ink">{record.signer_name}</p><p className="text-xs text-cti-gray">{record.signer_email}</p></td>}
-      {props.fields.map((field) => (
-        <td key={field.id} className="min-w-[160px] px-4 py-2.5">
+      <td className="border-r border-cti-line px-4 py-3"><StatusBadge status={record.status} /></td>
+      <td className="whitespace-nowrap border-r border-cti-line px-4 py-3 text-cti-gray">{new Date(record.created_at).toLocaleDateString()}</td>
+      {!props.isAutoPopulate && <td className="border-r border-cti-line px-4 py-3"><p className="font-semibold text-cti-ink">{record.signer_name}</p><p className="text-xs text-cti-gray">{record.signer_email}</p></td>}
+      {props.fields.map((field, i) => (
+        <td key={field.id} className={`min-w-[160px] px-4 py-2.5 ${i < props.fields.length - 1 ? 'border-r border-cti-line' : ''}`}>
           <CustomFieldInput field={field} variant="cell" disabled={props.completed || field.type === 'auto_number'} value={values[field.id] ?? ''} onChange={(value) => setValues((current) => ({ ...current, [field.id]: value }))} />
         </td>
       ))}
@@ -655,6 +649,42 @@ function valuesFromRecord(record: SignRecord, fields: ProjectCustomField[]) {
 
 function signUrlFor(record: SignRecord) {
   return `${window.location.origin}${import.meta.env.BASE_URL}sign/${record.token}`
+}
+
+function TimelineButton({ record, open, onToggle }: { record: SignRecord; open: boolean; onToggle: () => void }) {
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const rect = buttonRef.current?.getBoundingClientRect()
+    if (rect) setPosition({ top: rect.bottom + 4, left: rect.left })
+    const onScrollOrResize = () => onToggle()
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize)
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  return (
+    <>
+      <button ref={buttonRef} type="button" title="Timeline" aria-label="Timeline" onClick={onToggle} className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-colors ${rowActionTones.timeline}`}>
+        <ClockIcon />
+      </button>
+      {open && position && createPortal(
+        <>
+          <div className="fixed inset-0 z-40" onClick={onToggle} />
+          <div className="fixed z-50" style={{ top: position.top, left: position.left }}>
+            <Timeline record={record} />
+          </div>
+        </>,
+        document.body,
+      )}
+    </>
+  )
 }
 
 function Timeline({ record }: { record: SignRecord }) {

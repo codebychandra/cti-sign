@@ -499,35 +499,34 @@ function ProjectSettingTab({ projectId, project, updateProject, deleteProject }:
   }
 
   return (
-    <div className="max-w-md space-y-6">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <form onSubmit={save} className="card space-y-4 p-5">
         <h2 className="font-heading text-lg font-bold text-cti-black">Project Details</h2>
-        <div>
-          <label className="label">Project Name</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Description</label>
-          <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label">Project Name</label>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Description</label>
+            <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+          </div>
         </div>
         <div>
           <label className="label">Project Type</label>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-wrap gap-2">
             {projectTypeOptions.map((type) => (
-              <label key={type.value} className={`rounded-md border p-4 ${projectType === type.value ? 'border-cti-red bg-red-50' : 'border-cti-line bg-white'}`}>
-                <span className="flex items-center gap-2 font-semibold text-cti-ink">
-                  <input type="radio" name="projectTypeEdit" value={type.value} checked={projectType === type.value} onChange={() => setProjectType(type.value)} />
-                  {type.label}
-                </span>
-                <span className="mt-1 block text-sm text-cti-gray">{type.description}</span>
+              <label key={type.value} title={type.description} className={`cursor-pointer rounded-md border px-3 py-2 text-sm font-semibold ${projectType === type.value ? 'border-cti-red bg-red-50 text-cti-ink' : 'border-cti-line bg-white text-cti-gray'}`}>
+                <input type="radio" name="projectTypeEdit" value={type.value} checked={projectType === type.value} onChange={() => setProjectType(type.value)} className="sr-only" />
+                {type.label}
               </label>
             ))}
           </div>
         </div>
         <div>
           <label className="label">Message Template (Sent to Crew)</label>
-          <textarea className="input min-h-24" value={messageTemplate} onChange={(e) => setMessageTemplate(e.target.value)} placeholder={getAppSettings().defaultSignatureMessage} />
-          <p className="mt-1 text-xs text-cti-gray">Pre-fills the message when sending a signature request for this project. Leave blank to use the app-wide default from Settings.</p>
+          <textarea className="input min-h-16" rows={2} value={messageTemplate} onChange={(e) => setMessageTemplate(e.target.value)} placeholder={getAppSettings().defaultSignatureMessage} />
+          <p className="mt-1 text-xs text-cti-gray">Pre-fills the message when sending a signature request. Leave blank to use the app-wide default.</p>
         </div>
         <div className="flex items-center gap-3">
           <button className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
@@ -535,12 +534,14 @@ function ProjectSettingTab({ projectId, project, updateProject, deleteProject }:
         </div>
       </form>
 
-      <OneDriveConnectPanel projectId={projectId} />
+      <div className="space-y-6">
+        <OneDriveConnectPanel projectId={projectId} />
 
-      <div className="card space-y-3 border-cti-red/30 p-5">
-        <h2 className="font-heading text-base font-bold text-cti-red">Danger Zone</h2>
-        <p className="text-sm text-cti-gray">Permanently delete this project, its template, custom fields, and every record. This cannot be undone.</p>
-        <button type="button" className="btn-ghost w-full text-cti-red" onClick={deleteProject}>Delete Project</button>
+        <div className="card space-y-3 border-cti-red/30 p-5">
+          <h2 className="font-heading text-base font-bold text-cti-red">Danger Zone</h2>
+          <p className="text-xs text-cti-gray">Permanently delete this project, its template, custom fields, and every record.</p>
+          <button type="button" className="btn-ghost w-full text-cti-red" onClick={deleteProject}>Delete Project</button>
+        </div>
       </div>
     </div>
   )

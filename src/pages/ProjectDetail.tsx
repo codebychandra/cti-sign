@@ -594,8 +594,8 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
 
   return (
     <tr className="align-top hover:bg-cti-bg">
-      <td className="px-4 py-3">
-        <div className="flex flex-wrap items-center gap-1.5">
+      <td className="whitespace-nowrap px-4 py-3">
+        <div className="flex w-max flex-nowrap items-center gap-1">
           {!props.completed && !props.isAutoPopulate && (
             <input type="checkbox" className="mr-0.5 h-4 w-4 shrink-0" checked={Boolean(props.selectedRecords[record.id])} onChange={(e) => (props.setSelectedRecords as React.Dispatch<React.SetStateAction<Record<string, boolean>>>)((state) => ({ ...state, [record.id]: e.target.checked }))} />
           )}
@@ -626,7 +626,7 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
       <td className="px-4 py-3"><StatusBadge status={record.status} /></td>
       {props.fields.map((field) => (
         <td key={field.id} className="min-w-[160px] px-4 py-2.5">
-          <CustomFieldInput field={field} disabled={props.completed || field.type === 'auto_number'} value={values[field.id] ?? ''} onChange={(value) => setValues((current) => ({ ...current, [field.id]: value }))} />
+          <CustomFieldInput field={field} variant="cell" disabled={props.completed || field.type === 'auto_number'} value={values[field.id] ?? ''} onChange={(value) => setValues((current) => ({ ...current, [field.id]: value }))} />
         </td>
       ))}
     </tr>
@@ -713,15 +713,16 @@ function CustomValueInputs({ fields, values, setValues }: { fields: ProjectCusto
   return <div className="grid gap-4 sm:grid-cols-2">{fields.map((field) => <div key={field.id}><label className="label">{field.label}{field.required ? ' *' : ''}</label><CustomFieldInput field={field} value={values[field.id] ?? ''} onChange={(value) => setValues((current) => ({ ...current, [field.id]: value }))} /></div>)}</div>
 }
 
-function CustomFieldInput({ field, value, onChange, disabled }: { field: ProjectCustomField; value: string; onChange: (value: string) => void; disabled?: boolean }) {
+function CustomFieldInput({ field, value, onChange, disabled, variant = 'default' }: { field: ProjectCustomField; value: string; onChange: (value: string) => void; disabled?: boolean; variant?: 'default' | 'cell' }) {
   const options = normalizeOptions(field.options)
-  if (field.type === 'auto_number') return <input className="input" readOnly value={value || 'Auto generated'} />
-  if (field.type === 'single_dropdown') return <select className="input" required={field.required} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>
+  const inputClass = variant === 'cell' ? 'input-cell' : 'input'
+  if (field.type === 'auto_number') return <input className={inputClass} readOnly value={value || 'Auto generated'} />
+  if (field.type === 'single_dropdown') return <select className={inputClass} required={field.required} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>
   if (field.type === 'multi_dropdown') {
     const selected = parseMultiValue(value)
-    return <div className="rounded-md border border-cti-line bg-white p-3"><div className="grid gap-2 sm:grid-cols-2">{options.length === 0 && <p className="text-sm text-cti-gray">No options added.</p>}{options.map((option) => <label key={option} className="flex items-center gap-2 text-sm font-semibold text-cti-ink"><input type="checkbox" disabled={disabled} checked={selected.includes(option)} onChange={(e) => onChange(toggleMultiValue(value, option, e.target.checked))} />{option}</label>)}</div>{field.required && !selected.length && <input className="sr-only" required value="" onChange={() => {}} />}</div>
+    return <div className={variant === 'cell' ? 'rounded-md border border-transparent p-1' : 'rounded-md border border-cti-line bg-white p-3'}><div className="grid gap-2 sm:grid-cols-2">{options.length === 0 && <p className="text-sm text-cti-gray">No options added.</p>}{options.map((option) => <label key={option} className="flex items-center gap-2 text-sm font-semibold text-cti-ink"><input type="checkbox" disabled={disabled} checked={selected.includes(option)} onChange={(e) => onChange(toggleMultiValue(value, option, e.target.checked))} />{option}</label>)}</div>{field.required && !selected.length && <input className="sr-only" required value="" onChange={() => {}} />}</div>
   }
-  return <input className="input" type={inputTypeForCustomField(field)} required={field.required} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} />
+  return <input className={inputClass} type={inputTypeForCustomField(field)} required={field.required} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} />
 }
 
 function FieldTypeSelect({ value, onChange }: { value: CustomFieldType; onChange: (value: CustomFieldType) => void }) {

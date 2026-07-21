@@ -40,6 +40,10 @@
     @apply w-full rounded-md border border-cti-line px-3 py-2 text-sm
            focus:border-cti-red focus:outline-none focus:ring-1 focus:ring-cti-red;
   }
+  .input-cell {
+    @apply w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-xs
+           hover:border-cti-line focus:border-cti-red focus:bg-white focus:outline-none focus:ring-1 focus:ring-cti-red;
+  }
   .label {
     @apply mb-1 block text-sm font-semibold text-cti-ink;
   }

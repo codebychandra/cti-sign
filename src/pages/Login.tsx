@@ -5,6 +5,7 @@ import { Logo } from '../components/Logo'
 
 export function Login() {
   const { session, login } = useAuth()
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -28,9 +29,22 @@ export function Login() {
         </div>
         <div className="card p-6">
           <h1 className="mb-1 font-heading text-xl font-bold text-cti-black">Sign in</h1>
-          <p className="mb-5 text-sm text-cti-gray">CTI staff access</p>
+          <p className="mb-5 text-sm text-cti-gray">Sign in to CTI eSign: Official e-Signature Platform</p>
 
           <form onSubmit={submit} className="space-y-4">
+            <div>
+              <label className="label">Username</label>
+              <input
+                className="input"
+                type="email"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="name@cti-usa.com"
+                required
+                autoFocus
+                autoComplete="username"
+              />
+            </div>
             <div>
               <label className="label">Password</label>
               <input
@@ -39,7 +53,6 @@ export function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoFocus
                 autoComplete="current-password"
               />
             </div>

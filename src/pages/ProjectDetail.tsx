@@ -313,6 +313,15 @@ export function ProjectDetail() {
     load()
   }
 
+  const markSubmitted = async (recordId: string) => {
+    try {
+      await api.update('records', recordId, { status: 'submitted', submitted_at: new Date().toISOString() })
+    } catch (e) {
+      setError((e as Error).message)
+    }
+    load()
+  }
+
   const saveRecordCustomValues = async (recordId: string, values: Record<string, string>) => {
     const rows = customFields.map((field) => ({ field_id: field.id, value: values[field.id]?.trim() ?? '' }))
     try {
@@ -382,7 +391,7 @@ export function ProjectDetail() {
       {error && <p className="mb-4 rounded-md border border-cti-red/20 bg-red-50 p-3 text-sm text-cti-red">{error}</p>}
       <div className="mb-6 overflow-x-auto border-b border-cti-line"><div className="flex min-w-max gap-2">{tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setSearchParams(tab.id === 'template' ? {} : { tab: tab.id })} className={`border-b-2 px-4 py-3 text-left transition-colors ${activeTab === tab.id ? 'border-cti-red text-cti-black' : 'border-transparent text-cti-gray hover:text-cti-ink'}`}><span className="block text-sm font-bold">{tab.label}</span></button>)}</div></div>
       {activeTab === 'template' && <TemplateTab projectId={projectId!} template={template} customFields={customFields} ensureTemplate={ensureTemplate} renameTemplate={renameTemplate} deleteTemplate={deleteTemplate} fieldsManagerProps={{ customFields, newFieldLabel, setNewFieldLabel, newFieldType, setNewFieldType, newFieldRequired, setNewFieldRequired, newFieldShow, setNewFieldShow, newFieldPrefix, setNewFieldPrefix, newFieldStart, setNewFieldStart, newFieldOptions, setNewFieldOptions, editingFieldId, editFieldLabel, setEditFieldLabel, editFieldType, setEditFieldType, editFieldRequired, setEditFieldRequired, editFieldShow, setEditFieldShow, editFieldPrefix, setEditFieldPrefix, editFieldStart, setEditFieldStart, editFieldOptions, setEditFieldOptions, createCustomField, beginEditField, saveFieldEdit, cancelFieldEdit: () => setEditingFieldId(null), deleteCustomField, toggleFieldVisible, moveCustomField }} />}
-      {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} sendOne={sendOne} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} saveCustomValues={saveRecordCustomValues} openPanel={setPanel} />}
+      {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} markSubmitted={markSubmitted} sendOne={sendOne} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} saveCustomValues={saveRecordCustomValues} openPanel={setPanel} />}
       {activeTab === 'completed' && <CompletedTab isAutoPopulate={isAutoPopulate} records={completedRecords} visibleFields={visibleFields} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} saveCustomValues={saveRecordCustomValues} />}
       {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} project={project} updateProject={updateProject} />}
       {panel === 'add' && <RecordPanel title="Add record" onClose={() => setPanel(null)}><RecordForm isAutoPopulate={isAutoPopulate} template={template} signerName={signerName} setSignerName={setSignerName} signerEmail={signerEmail} setSignerEmail={setSignerEmail} message={message} setMessage={setMessage} customFields={customFields} customValues={customValues} setCustomValues={setCustomValues} createRecord={createRecord} /></RecordPanel>}
@@ -467,12 +476,12 @@ function ProjectSettingTab({ projectId, project, updateProject }: { projectId: s
   )
 }
 
-function FormTab(props: { isAutoPopulate: boolean; template?: Form; records: SignRecord[]; visibleFields: ProjectCustomField[]; selectedRecords: Record<string, boolean>; setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>; massMarkSent: () => void; deleteRecord: (recordId: string) => void; markComplete: (recordId: string) => void; sendOne: (recordId: string) => void; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void>; openPanel: (mode: PanelMode) => void }) {
-  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-heading text-lg font-bold text-cti-black">Records</h2><p className="text-sm text-cti-gray">{props.template?.has_template ? 'Table uses visible columns from the Template tab. Cell values save inline; use the action icons for send, timeline, letter, complete and delete.' : 'Create and map a template before adding records.'}</p></div><div className="flex gap-2"><button className="btn-ghost" onClick={() => props.openPanel('import')} disabled={!props.template?.has_template}>Import records</button><button className="btn-primary" onClick={() => props.openPanel('add')} disabled={!props.template?.has_template}>+ Add record</button>{!props.isAutoPopulate && <button className="btn-dark" onClick={props.massMarkSent}>Mass send</button>}</div></div><RecordsTable isAutoPopulate={props.isAutoPopulate} records={props.records} fields={props.visibleFields} selectedRecords={props.selectedRecords} setSelectedRecords={props.setSelectedRecords} deleteRecord={props.deleteRecord} markComplete={props.markComplete} sendOne={props.sendOne} downloadPdf={props.downloadPdf} downloadSignedPdf={props.downloadSignedPdf} saveCustomValues={props.saveCustomValues} completed={false} /></section>
+function FormTab(props: { isAutoPopulate: boolean; template?: Form; records: SignRecord[]; visibleFields: ProjectCustomField[]; selectedRecords: Record<string, boolean>; setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>; massMarkSent: () => void; deleteRecord: (recordId: string) => void; markComplete: (recordId: string) => void; markSubmitted: (recordId: string) => void; sendOne: (recordId: string) => void; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void>; openPanel: (mode: PanelMode) => void }) {
+  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-heading text-lg font-bold text-cti-black">Records</h2><p className="text-sm text-cti-gray">{props.template?.has_template ? 'Table uses visible columns from the Template tab. Cell values save inline; use the action icons for send, timeline, letter, reminder, complete and delete.' : 'Create and map a template before adding records.'}</p></div><div className="flex gap-2"><button className="btn-ghost" onClick={() => props.openPanel('import')} disabled={!props.template?.has_template}>Import records</button><button className="btn-primary" onClick={() => props.openPanel('add')} disabled={!props.template?.has_template}>+ Add record</button>{!props.isAutoPopulate && <button className="btn-dark" onClick={props.massMarkSent}>Mass send</button>}</div></div><RecordsTable isAutoPopulate={props.isAutoPopulate} records={props.records} fields={props.visibleFields} selectedRecords={props.selectedRecords} setSelectedRecords={props.setSelectedRecords} deleteRecord={props.deleteRecord} markComplete={props.markComplete} markSubmitted={props.markSubmitted} sendOne={props.sendOne} downloadPdf={props.downloadPdf} downloadSignedPdf={props.downloadSignedPdf} saveCustomValues={props.saveCustomValues} completed={false} /></section>
 }
 
 function CompletedTab({ isAutoPopulate, records, visibleFields, downloadPdf, downloadSignedPdf, saveCustomValues }: { isAutoPopulate: boolean; records: SignRecord[]; visibleFields: ProjectCustomField[]; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void> }) {
-  return <section><h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Completed</h2><RecordsTable isAutoPopulate={isAutoPopulate} records={records} fields={visibleFields} selectedRecords={{}} setSelectedRecords={() => {}} deleteRecord={() => {}} markComplete={() => {}} sendOne={() => {}} downloadPdf={downloadPdf} downloadSignedPdf={downloadSignedPdf} saveCustomValues={saveCustomValues} completed /></section>
+  return <section><h2 className="mb-3 font-heading text-lg font-bold text-cti-black">Completed</h2><RecordsTable isAutoPopulate={isAutoPopulate} records={records} fields={visibleFields} selectedRecords={{}} setSelectedRecords={() => {}} deleteRecord={() => {}} markComplete={() => {}} markSubmitted={() => {}} sendOne={() => {}} downloadPdf={downloadPdf} downloadSignedPdf={downloadSignedPdf} saveCustomValues={saveCustomValues} completed /></section>
 }
 
 type SettingTabProps = { customFields: ProjectCustomField[]; newFieldLabel: string; setNewFieldLabel: (value: string) => void; newFieldType: CustomFieldType; setNewFieldType: (value: CustomFieldType) => void; newFieldRequired: boolean; setNewFieldRequired: (value: boolean) => void; newFieldShow: boolean; setNewFieldShow: (value: boolean) => void; newFieldPrefix: string; setNewFieldPrefix: (value: string) => void; newFieldStart: number; setNewFieldStart: (value: number) => void; newFieldOptions: string; setNewFieldOptions: (value: string) => void; editingFieldId: string | null; editFieldLabel: string; setEditFieldLabel: (value: string) => void; editFieldType: CustomFieldType; setEditFieldType: (value: CustomFieldType) => void; editFieldRequired: boolean; setEditFieldRequired: (value: boolean) => void; editFieldShow: boolean; setEditFieldShow: (value: boolean) => void; editFieldPrefix: string; setEditFieldPrefix: (value: string) => void; editFieldStart: number; setEditFieldStart: (value: number) => void; editFieldOptions: string; setEditFieldOptions: (value: string) => void; createCustomField: (e: React.FormEvent) => void; beginEditField: (field: ProjectCustomField) => void; saveFieldEdit: (fieldId: string) => void; cancelFieldEdit: () => void; deleteCustomField: (fieldId: string) => void; toggleFieldVisible: (field: ProjectCustomField) => void; moveCustomField: (fieldId: string, direction: -1 | 1) => void }
@@ -536,6 +545,7 @@ type RecordsTableProps = {
   setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>> | (() => void)
   deleteRecord: (recordId: string) => void
   markComplete: (recordId: string) => void
+  markSubmitted: (recordId: string) => void
   sendOne: (recordId: string) => void
   downloadPdf: (record: SignRecord) => void
   downloadSignedPdf: (record: SignRecord) => void
@@ -550,9 +560,9 @@ function RecordsTable(props: RecordsTableProps) {
         <thead className="border-b border-cti-line bg-cti-bg text-xs uppercase tracking-wide text-cti-gray">
           <tr>
             <th className="whitespace-nowrap px-4 py-3">Action</th>
+            <th className="whitespace-nowrap px-4 py-3">Status</th>
             <th className="whitespace-nowrap px-4 py-3">Created</th>
             {!props.isAutoPopulate && <th className="whitespace-nowrap px-4 py-3">Signer</th>}
-            <th className="whitespace-nowrap px-4 py-3">Status</th>
             {props.fields.map((field) => <th key={field.id} className="whitespace-nowrap px-4 py-3">{field.label}</th>)}
           </tr>
         </thead>
@@ -592,38 +602,43 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
     setSaving(false)
   }
 
+  const downloadAndAdvance = () => {
+    props.downloadPdf(record)
+    if (record.status === 'draft') props.markSubmitted(record.id)
+  }
+
   return (
     <tr className="align-top hover:bg-cti-bg">
       <td className="whitespace-nowrap px-4 py-3">
-        <div className="flex w-max flex-nowrap items-center gap-1">
+        <div className="flex w-max flex-nowrap items-center gap-1.5">
           {!props.completed && !props.isAutoPopulate && (
             <input type="checkbox" className="mr-0.5 h-4 w-4 shrink-0" checked={Boolean(props.selectedRecords[record.id])} onChange={(e) => (props.setSelectedRecords as React.Dispatch<React.SetStateAction<Record<string, boolean>>>)((state) => ({ ...state, [record.id]: e.target.checked }))} />
           )}
-          {!props.completed && !props.isAutoPopulate && (
-            <SendButton label={record.status === 'draft' ? 'Send' : 'Remind'} onClick={() => props.sendOne(record.id)} />
-          )}
+          {!props.completed && !props.isAutoPopulate && record.status === 'draft' && <SendButton label="Send" onClick={() => props.sendOne(record.id)} />}
+          {!props.completed && !props.isAutoPopulate && (record.status === 'sent' || record.status === 'viewed') && <PendingBadge />}
+          {!props.completed && !props.isAutoPopulate && isSubmitted && <SendButton label="Complete" onClick={() => props.markComplete(record.id)} />}
+          {!props.completed && props.isAutoPopulate && record.status === 'draft' && <SendButton label="Download" onClick={downloadAndAdvance} />}
+          {!props.completed && props.isAutoPopulate && record.status !== 'draft' && <SendButton label="Complete" onClick={() => props.markComplete(record.id)} />}
           {dirty && <RowActionIcon label="Save changes" tone="save" onClick={save} disabled={saving}><SaveIcon /></RowActionIcon>}
-          {!props.isAutoPopulate && (
-            <span className="relative">
-              <RowActionIcon label="Timeline" tone="timeline" onClick={() => setShowTimeline((v) => !v)}><ClockIcon /></RowActionIcon>
-              {showTimeline && (
-                <span className="absolute left-0 top-full z-20 mt-1">
-                  <Timeline record={record} />
-                </span>
-              )}
-            </span>
-          )}
-          {!props.isAutoPopulate && <RowActionIcon label="Open signing letter" tone="letter" onClick={() => window.open(signUrlFor(record), '_blank')}><ExternalLinkIcon /></RowActionIcon>}
-          {!props.completed && props.isAutoPopulate && <RowActionIcon label="Download PDF" tone="neutral" onClick={() => props.downloadPdf(record)}><DownloadIcon /></RowActionIcon>}
+          <span className="relative">
+            <RowActionIcon label="Timeline" tone="timeline" onClick={() => setShowTimeline((v) => !v)}><ClockIcon /></RowActionIcon>
+            {showTimeline && (
+              <span className="absolute left-0 top-full z-20 mt-1">
+                <Timeline record={record} />
+              </span>
+            )}
+          </span>
+          <RowActionIcon label="Open signing letter" tone="letter" onClick={() => window.open(signUrlFor(record), '_blank')}><LetterIcon /></RowActionIcon>
+          {!props.completed && <RowActionIcon label="Send reminder" tone="reminder" onClick={() => props.sendOne(record.id)}><BellIcon /></RowActionIcon>}
+          {props.completed && props.isAutoPopulate && <RowActionIcon label="Download PDF" tone="neutral" onClick={() => props.downloadPdf(record)}><DownloadIcon /></RowActionIcon>}
           {props.completed && !props.isAutoPopulate && <RowActionIcon label="Download signed PDF" tone="neutral" onClick={() => props.downloadSignedPdf(record)}><DownloadIcon /></RowActionIcon>}
           {props.completed && !props.isAutoPopulate && record.onedrive_url && <RowActionIcon label="Open copy in OneDrive" tone="letter" onClick={() => window.open(record.onedrive_url!, '_blank')}><ExternalLinkIcon /></RowActionIcon>}
-          {!props.completed && isSubmitted && <RowActionIcon label="Mark complete" tone="success" onClick={() => props.markComplete(record.id)}><CheckCircleIcon /></RowActionIcon>}
           {!props.completed && <RowActionIcon label="Delete record" tone="danger" onClick={() => props.deleteRecord(record.id)}><TrashIcon /></RowActionIcon>}
         </div>
       </td>
+      <td className="px-4 py-3"><StatusBadge status={record.status} /></td>
       <td className="whitespace-nowrap px-4 py-3 text-cti-gray">{new Date(record.created_at).toLocaleDateString()}</td>
       {!props.isAutoPopulate && <td className="px-4 py-3"><p className="font-semibold text-cti-ink">{record.signer_name}</p><p className="text-xs text-cti-gray">{record.signer_email}</p></td>}
-      <td className="px-4 py-3"><StatusBadge status={record.status} /></td>
       {props.fields.map((field) => (
         <td key={field.id} className="min-w-[160px] px-4 py-2.5">
           <CustomFieldInput field={field} variant="cell" disabled={props.completed || field.type === 'auto_number'} value={values[field.id] ?? ''} onChange={(value) => setValues((current) => ({ ...current, [field.id]: value }))} />
@@ -668,20 +683,24 @@ function Timeline({ record }: { record: SignRecord }) {
 }
 
 function SendButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className="flex shrink-0 items-center gap-1.5 rounded-md bg-cti-blue px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-700"><SendIcon />{label}</button>
+  return <button type="button" onClick={onClick} className="flex shrink-0 items-center gap-1.5 rounded-md border border-cti-blue bg-white px-3 py-1 text-xs font-bold text-cti-blue transition-colors hover:bg-blue-50"><SendIcon />{label}</button>
+}
+
+function PendingBadge() {
+  return <span className="flex shrink-0 items-center gap-1.5 rounded-md border border-amber-400 bg-white px-3 py-1 text-xs font-bold text-amber-500">Pending</span>
 }
 
 const rowActionTones = {
-  save: 'bg-cti-red text-white hover:bg-cti-redDark',
-  timeline: 'bg-green-100 text-green-700 hover:bg-green-200',
-  letter: 'bg-teal-100 text-teal-700 hover:bg-teal-200',
-  success: 'bg-blue-100 text-cti-blue hover:bg-blue-200',
-  danger: 'bg-red-100 text-cti-red hover:bg-red-200',
-  neutral: 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+  save: 'border-cti-red bg-cti-red text-white hover:bg-cti-redDark',
+  timeline: 'border-green-500 bg-white text-green-600 hover:bg-green-50',
+  letter: 'border-cti-blue bg-white text-cti-blue hover:bg-blue-50',
+  reminder: 'border-amber-400 bg-white text-amber-500 hover:bg-amber-50',
+  danger: 'border-cti-red bg-white text-cti-red hover:bg-red-50',
+  neutral: 'border-cti-line bg-white text-cti-gray hover:bg-cti-bg',
 } as const
 
 function RowActionIcon({ label, onClick, disabled, tone, children }: { label: string; onClick: () => void; disabled?: boolean; tone: keyof typeof rowActionTones; children: React.ReactNode }) {
-  return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${rowActionTones[tone]}`}>{children}</button>
+  return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${rowActionTones[tone]}`}>{children}</button>
 }
 
 function SendIcon() {
@@ -696,8 +715,12 @@ function ExternalLinkIcon() {
   return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M8 4H4.5a1 1 0 0 0-1 1v10.5a1 1 0 0 0 1 1H15a1 1 0 0 0 1-1V12" /><path d="M9 11 16 4M11.5 4H16v4.5" /></svg>
 }
 
-function CheckCircleIcon() {
-  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><circle cx="10" cy="10" r="7.5" /><path d="M6.5 10.2 9 12.5 13.5 7.5" /></svg>
+function LetterIcon() {
+  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M5.5 2.5h6L15 5.5v11a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1Z" /><path d="M11.5 2.5V6H15M7 9.5h6M7 12.5h6" /></svg>
+}
+
+function BellIcon() {
+  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M10 2.5a1 1 0 0 0-1 1v.6C6.6 4.6 5 6.6 5 9v3l-1.5 2h13L15 12V9c0-2.4-1.6-4.4-4-4.9V3.5a1 1 0 0 0-1-1Z" /><path d="M8 16a2 2 0 0 0 4 0" /></svg>
 }
 
 function DownloadIcon() {

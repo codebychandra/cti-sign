@@ -15,6 +15,8 @@ export function MasterData() {
   const [search, setSearch] = useState('')
   const [cruiseLineFilter, setCruiseLineFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [signOnDateFrom, setSignOnDateFrom] = useState('')
+  const [signOnDateTo, setSignOnDateTo] = useState('')
   const [selected, setSelected] = useState<Record<string, boolean>>({})
 
   const [projects, setProjects] = useState<Project[]>([])
@@ -73,10 +75,12 @@ export function MasterData() {
     return rows.filter((r) => {
       if (cruiseLineFilter && r.cruiseLine !== cruiseLineFilter) return false
       if (statusFilter && r.onboardingStatus !== statusFilter) return false
+      if (signOnDateFrom && (!r.signOnDate || r.signOnDate < signOnDateFrom)) return false
+      if (signOnDateTo && (!r.signOnDate || r.signOnDate > signOnDateTo)) return false
       if (q && !`${r.fullName} ${r.seafarerIdNumber} ${r.passportNumber}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [rows, search, cruiseLineFilter, statusFilter])
+  }, [rows, search, cruiseLineFilter, statusFilter, signOnDateFrom, signOnDateTo])
 
   const selectedRows = filtered.filter((r) => selected[r.id])
   const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selected[r.id])
@@ -171,10 +175,21 @@ export function MasterData() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="label">Sign On Date Between</label>
+              <div className="flex items-center gap-2">
+                <input type="date" className="input" value={signOnDateFrom} onChange={(e) => setSignOnDateFrom(e.target.value)} />
+                <span className="text-xs text-cti-gray">and</span>
+                <input type="date" className="input" value={signOnDateTo} onChange={(e) => setSignOnDateTo(e.target.value)} />
+                {(signOnDateFrom || signOnDateTo) && (
+                  <button type="button" className="btn-ghost" onClick={() => { setSignOnDateFrom(''); setSignOnDateTo('') }}>Clear</button>
+                )}
+              </div>
+            </div>
             <p className="pb-2 text-xs text-cti-gray">{filtered.length} of {rows.length} seafarers</p>
           </div>
 
-          <div className="card flex flex-wrap items-center gap-3 p-4">
+          <div className="card flex flex-wrap items-end gap-3 p-4">
             <div className="min-w-[220px]">
               <label className="label">Copy Selected To Project</label>
               <select className="input" value={targetProjectId} onChange={(e) => setTargetProjectId(e.target.value)}>
@@ -184,10 +199,10 @@ export function MasterData() {
                 ))}
               </select>
             </div>
-            {targetProjectId && !targetForm?.has_template && <p className="text-xs text-cti-red">This project has no uploaded template yet.</p>}
             <button className="btn-primary" onClick={copyToProject} disabled={!canCopy}>
               {copying ? 'Copying…' : `Copy ${selectedRows.length || ''} to Project`.trim()}
             </button>
+            {targetProjectId && !targetForm?.has_template && <p className="text-xs text-cti-red">This project has no uploaded template yet.</p>}
           </div>
 
           <div className="card overflow-x-auto p-0">
@@ -198,11 +213,11 @@ export function MasterData() {
                     <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} className="h-4 w-4" />
                   </th>
                   <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Name</th>
+                  <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Onboarding Status</th>
                   <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Crew ID</th>
                   <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Position</th>
                   <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Cruise Line</th>
-                  <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Onboarding Status</th>
-                  <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Sign On Port</th>
+                  <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Sign On Date</th>
                   {targetProjectId && <th className="whitespace-nowrap px-4 py-3">Fields Matched</th>}
                 </tr>
               </thead>
@@ -223,11 +238,11 @@ export function MasterData() {
                       />
                     </td>
                     <td className="border-r border-cti-line px-4 py-2.5 font-semibold text-cti-ink">{row.fullName}</td>
+                    <td className="border-r border-cti-line px-4 py-2.5 text-cti-gray">{row.onboardingStatus || '—'}</td>
                     <td className="border-r border-cti-line px-4 py-2.5 text-cti-gray">{row.seafarerIdNumber || '—'}</td>
                     <td className="border-r border-cti-line px-4 py-2.5 text-cti-gray">{row.positionHired || '—'}</td>
                     <td className="border-r border-cti-line px-4 py-2.5 text-cti-gray">{row.cruiseLine || '—'}</td>
-                    <td className="border-r border-cti-line px-4 py-2.5 text-cti-gray">{row.onboardingStatus || '—'}</td>
-                    <td className="border-r border-cti-line px-4 py-2.5 text-cti-gray">{row.signOnPort || '—'}</td>
+                    <td className="border-r border-cti-line px-4 py-2.5 text-cti-gray">{row.signOnDate || '—'}</td>
                     {targetProjectId && <td className="px-4 py-2.5 text-cti-gray">{matchedFieldCount(row, targetFields)} / {targetFields.filter((f) => f.type !== 'auto_number').length}</td>}
                   </tr>
                 ))}

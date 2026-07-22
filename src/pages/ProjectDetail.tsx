@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { getAppSettings } from '../lib/settings'
-import { buildSignedPdf } from '../lib/pdf'
-import type { CustomFieldType, Form, Project, ProjectCustomField, SignRecord } from '../lib/types'
+import { buildSignedPdf, formatSignedDate } from '../lib/pdf'
+import type { CustomFieldType, Form, Project, ProjectCustomField, RecordValue, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
 import { OneDriveConnectPanel } from '../components/OneDriveConnectPanel'
@@ -397,9 +397,7 @@ export function ProjectDetail() {
       const { base64 } = await api.getTemplate(template.id)
       const formFields = template.fields
       const customVals = record.custom_values
-      const values = formFields
-        .filter((f) => f.custom_field_id && customVals.some((v) => v.field_id === f.custom_field_id && v.value))
-        .map((f) => ({ field_id: f.id, value: customVals.find((v) => v.field_id === f.custom_field_id)!.value }))
+      const values = buildAutoPopulateValues(formFields, customVals)
       const templateBytes = base64ToArrayBuffer(base64)
       const bytes = await buildSignedPdf(templateBytes, formFields, values)
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
@@ -428,9 +426,7 @@ export function ProjectDetail() {
       const { base64 } = await api.getTemplate(template.id)
       const formFields = template.fields
       const customVals = record.custom_values
-      const values = formFields
-        .filter((f) => f.custom_field_id && customVals.some((v) => v.field_id === f.custom_field_id && v.value))
-        .map((f) => ({ field_id: f.id, value: customVals.find((v) => v.field_id === f.custom_field_id)!.value }))
+      const values = buildAutoPopulateValues(formFields, customVals)
       const templateBytes = base64ToArrayBuffer(base64)
       const bytes = await buildSignedPdf(templateBytes, formFields, values)
       window.open(URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' })), '_blank')
@@ -1020,6 +1016,22 @@ function inputTypeForCustomField(field: ProjectCustomField) {
 // "{Doc Name}_{Name}_{Id Number}.pdf" — falls back gracefully when a project
 // has no field literally labeled "Name" (uses signer_name) or no auto-number
 // field (drops that segment entirely) so this works for any project shape.
+// Auto-populate records never go through the real signer flow, so a
+// mapped Signed Date field never gets a value the way it would for
+// sent-signature records. Stamp it with "now" (the moment of download/
+// view) instead, unless it's explicitly mapped to a custom field with its
+// own value.
+function buildAutoPopulateValues(formFields: Form['fields'], customVals: SignRecord['custom_values']): RecordValue[] {
+  const values = formFields
+    .filter((f) => f.custom_field_id && customVals.some((v) => v.field_id === f.custom_field_id && v.value))
+    .map((f) => ({ field_id: f.id, value: customVals.find((v) => v.field_id === f.custom_field_id)!.value }))
+  const stamped = new Set(values.map((v) => v.field_id))
+  for (const f of formFields) {
+    if (f.type === 'signed_date' && !stamped.has(f.id)) values.push({ field_id: f.id, value: formatSignedDate(new Date()) })
+  }
+  return values
+}
+
 function downloadFilename(docName: string, record: SignRecord, customFields: ProjectCustomField[]): string {
   const valueFor = (field?: ProjectCustomField) => field && record.custom_values.find((v) => v.field_id === field.id)?.value?.trim()
   const nameField = customFields.find((f) => f.label.trim().toLowerCase() === 'name')

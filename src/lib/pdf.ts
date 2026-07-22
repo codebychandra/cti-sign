@@ -1,6 +1,6 @@
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { PDFDocument, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFRadioGroup, PDFDropdown, PDFOptionList } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFRadioGroup, PDFDropdown, PDFOptionList, type PDFFont } from 'pdf-lib'
 import type { FormField, RecordValue } from './types'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
@@ -54,7 +54,9 @@ export async function buildSignedPdf(templateBytes: ArrayBuffer, fields: FormFie
       const padding = 2
       const fontSize = clamp(f.font_size ?? 11, 6, Math.max(6, boxH * 0.9))
       const align = f.text_align ?? 'left'
-      const lines = f.type === 'textarea' ? value.split(/\r?\n/) : [value]
+      const lines = f.type === 'textarea'
+        ? value.split(/\r?\n/).flatMap((paragraph) => wrapToWidth(paragraph, font, fontSize, boxW - padding * 2))
+        : [value]
       const lineHeight = fontSize * 1.2
       const maxLines = Math.max(1, Math.floor((boxH - padding * 2) / lineHeight))
       const visibleLines = lines.slice(0, maxLines)
@@ -160,3 +162,24 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
 }
 
 function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)) }
+
+/** Breaks a paragraph into lines that each fit maxWidth, word-wrapping like a
+ * real textarea instead of letting long single-line values run off the box
+ * (and potentially off the page) since pdf-lib's drawText never wraps on its own. */
+function wrapToWidth(paragraph: string, font: PDFFont, fontSize: number, maxWidth: number): string[] {
+  if (!paragraph) return ['']
+  const words = paragraph.split(' ')
+  const lines: string[] = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (!current || font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+      current = candidate
+    } else {
+      lines.push(current)
+      current = word
+    }
+  }
+  if (current) lines.push(current)
+  return lines
+}

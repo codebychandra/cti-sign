@@ -15,3 +15,7 @@ supabase/.temp
 vite.config.js
 vite.config.d.ts
 *.tsbuildinfo
+
+# Pre-existing OneDrive-synced content in this folder, not part of the repo
+/CTI eSign Documents/
+/cti-esign.png

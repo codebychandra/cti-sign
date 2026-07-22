@@ -8,6 +8,7 @@ import { FormEditor } from './pages/FormEditor'
 import { Settings } from './pages/Settings'
 import { SignPage } from './pages/SignPage'
 import { OneDriveCallback } from './pages/OneDriveCallback'
+import { MasterData } from './pages/MasterData'
 
 function Protected({ children }: { children: JSX.Element }) {
   const { session, loading } = useAuth()
@@ -54,6 +55,16 @@ export default function App() {
           <Protected>
             <Layout>
               <FormEditor />
+            </Layout>
+          </Protected>
+        }
+      />
+      <Route
+        path="/master-data"
+        element={
+          <Protected>
+            <Layout>
+              <MasterData />
             </Layout>
           </Protected>
         }

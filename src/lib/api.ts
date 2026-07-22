@@ -62,6 +62,8 @@ export const api = {
     request('/send-completion-email', { method: 'POST', body: JSON.stringify({ recordId }) }),
   onedrive: (body: Record<string, unknown>): Promise<any> =>
     request('/onedrive', { method: 'POST', body: JSON.stringify(body) }),
+  getMasterData: (refresh?: boolean): Promise<{ source: string; count: number; truncated: boolean; data: import('./masterData').SeafarerRow[] }> =>
+    request(`/master-data${refresh ? '?refresh=1' : ''}`),
 
   // Public signer flow.
   getSigningSession: (token: string): Promise<any> => publicRequest(`/sign/${token}`),

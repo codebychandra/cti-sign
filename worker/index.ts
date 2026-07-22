@@ -11,6 +11,7 @@ import {
   uploadToGraphFolder,
   type OneDriveConnection,
 } from './graph'
+import { getMasterData, isZohoConfigured } from './zoho'
 
 // --- Data shapes (mirrors src/lib/types.ts, with form_fields/values nested) -
 
@@ -140,6 +141,7 @@ async function route(request: Request, url: URL, env: Env): Promise<Response> {
   if (method === 'POST' && path === 'send-signature-request') return handleSendSignatureRequest(request, env)
   if (method === 'POST' && path === 'send-completion-email') return handleSendCompletionEmail(request, env)
   if (method === 'POST' && path === 'onedrive') return handleOneDrive(request, env)
+  if (method === 'GET' && path === 'master-data') return handleMasterData(url, env)
 
   // --- Generic collection CRUD ---------------------------------------------
   const collectionName = segments[0]
@@ -405,6 +407,18 @@ async function markSent(env: Env, recordId: string): Promise<void> {
     const idx = items.findIndex((r) => r.id === recordId)
     if (idx >= 0) items[idx] = { ...items[idx], status: 'sent', sent_at: nowIso() }
   })
+}
+
+// --- Master Data (Zoho Recruit Candidates feed) ---------------------------------
+
+async function handleMasterData(url: URL, env: Env): Promise<Response> {
+  if (!isZohoConfigured(env)) return json({ error: 'Zoho is not configured on this environment.' }, 409)
+  try {
+    const payload = await getMasterData(env, url.searchParams.get('refresh') === '1')
+    return json(payload)
+  } catch (e) {
+    return json({ error: 'Zoho error: ' + (e as Error).message }, 502)
+  }
 }
 
 // --- OneDrive connect (multi-action) --------------------------------------------

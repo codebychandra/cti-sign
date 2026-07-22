@@ -7,6 +7,9 @@ export interface Env {
   MS_CLIENT_ID?: string
   MS_CLIENT_SECRET?: string
   MS_SEND_FROM?: string
+  ZOHO_CLIENT_ID?: string
+  ZOHO_CLIENT_SECRET?: string
+  ZOHO_REFRESH_TOKEN?: string
 }
 
 export async function getCollection<T>(env: Env, key: string): Promise<T[]> {

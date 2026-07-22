@@ -26,6 +26,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {session && (
           <>
             <nav className="flex-1 space-y-2 px-4 py-5">
+              <SidebarItem to="/master-data" icon={<MasterDataIcon />}>Master Data</SidebarItem>
               <SidebarItem to="/" icon={<ProjectsIcon />}>Projects</SidebarItem>
             </nav>
             <div className="border-t border-cti-line p-4">
@@ -45,6 +46,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
           {session && (
             <nav className="flex gap-2 overflow-x-auto border-t border-cti-line px-4 py-2">
+              <MobileItem to="/master-data" icon={<MasterDataIcon />}>Master Data</MobileItem>
               <MobileItem to="/" icon={<ProjectsIcon />}>Projects</MobileItem>
             </nav>
           )}
@@ -152,6 +154,16 @@ function ProjectsIcon() {
     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h3.1l2 2H17.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-10Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
       <path d="M4 9h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function MasterDataIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <ellipse cx="12" cy="6" rx="7" ry="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   )
 }

@@ -4,6 +4,15 @@ import type { Form, Project, ProjectCustomField } from '../lib/types'
 import { buildCustomValuesFromSeafarer, matchedFieldCount, type SeafarerRow } from '../lib/masterData'
 import { PageHeader } from '../components/Layout'
 
+type DateFilterOp = 'any' | 'before' | 'after' | 'on' | 'between'
+const DATE_FILTER_OPS: { value: DateFilterOp; label: string }[] = [
+  { value: 'any', label: 'Any Date' },
+  { value: 'before', label: 'Before' },
+  { value: 'after', label: 'After' },
+  { value: 'on', label: 'On' },
+  { value: 'between', label: 'Between' },
+]
+
 export function MasterData() {
   const [rows, setRows] = useState<SeafarerRow[]>([])
   const [truncated, setTruncated] = useState(false)
@@ -15,6 +24,7 @@ export function MasterData() {
   const [search, setSearch] = useState('')
   const [cruiseLineFilter, setCruiseLineFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [signOnDateOp, setSignOnDateOp] = useState<DateFilterOp>('any')
   const [signOnDateFrom, setSignOnDateFrom] = useState('')
   const [signOnDateTo, setSignOnDateTo] = useState('')
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -75,12 +85,17 @@ export function MasterData() {
     return rows.filter((r) => {
       if (cruiseLineFilter && r.cruiseLine !== cruiseLineFilter) return false
       if (statusFilter && r.onboardingStatus !== statusFilter) return false
-      if (signOnDateFrom && (!r.signOnDate || r.signOnDate < signOnDateFrom)) return false
-      if (signOnDateTo && (!r.signOnDate || r.signOnDate > signOnDateTo)) return false
+      if (signOnDateOp !== 'any') {
+        if (!r.signOnDate) return false
+        if (signOnDateOp === 'before' && !(signOnDateFrom && r.signOnDate < signOnDateFrom)) return false
+        if (signOnDateOp === 'after' && !(signOnDateFrom && r.signOnDate > signOnDateFrom)) return false
+        if (signOnDateOp === 'on' && r.signOnDate !== signOnDateFrom) return false
+        if (signOnDateOp === 'between' && !((!signOnDateFrom || r.signOnDate >= signOnDateFrom) && (!signOnDateTo || r.signOnDate <= signOnDateTo))) return false
+      }
       if (q && !`${r.fullName} ${r.seafarerIdNumber} ${r.passportNumber}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [rows, search, cruiseLineFilter, statusFilter, signOnDateFrom, signOnDateTo])
+  }, [rows, search, cruiseLineFilter, statusFilter, signOnDateOp, signOnDateFrom, signOnDateTo])
 
   const selectedRows = filtered.filter((r) => selected[r.id])
   const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selected[r.id])
@@ -176,13 +191,26 @@ export function MasterData() {
               </select>
             </div>
             <div>
-              <label className="label">Sign On Date Between</label>
+              <label className="label">Sign On Date</label>
               <div className="flex items-center gap-2">
-                <input type="date" className="input" value={signOnDateFrom} onChange={(e) => setSignOnDateFrom(e.target.value)} />
-                <span className="text-xs text-cti-gray">and</span>
-                <input type="date" className="input" value={signOnDateTo} onChange={(e) => setSignOnDateTo(e.target.value)} />
-                {(signOnDateFrom || signOnDateTo) && (
-                  <button type="button" className="btn-ghost" onClick={() => { setSignOnDateFrom(''); setSignOnDateTo('') }}>Clear</button>
+                <select
+                  className="input"
+                  value={signOnDateOp}
+                  onChange={(e) => { setSignOnDateOp(e.target.value as DateFilterOp); setSignOnDateFrom(''); setSignOnDateTo('') }}
+                >
+                  {DATE_FILTER_OPS.map((op) => (
+                    <option key={op.value} value={op.value}>{op.label}</option>
+                  ))}
+                </select>
+                {signOnDateOp !== 'any' && <input type="date" className="input" value={signOnDateFrom} onChange={(e) => setSignOnDateFrom(e.target.value)} />}
+                {signOnDateOp === 'between' && (
+                  <>
+                    <span className="text-xs text-cti-gray">and</span>
+                    <input type="date" className="input" value={signOnDateTo} onChange={(e) => setSignOnDateTo(e.target.value)} />
+                  </>
+                )}
+                {signOnDateOp !== 'any' && (
+                  <button type="button" className="btn-ghost" onClick={() => { setSignOnDateOp('any'); setSignOnDateFrom(''); setSignOnDateTo('') }}>Clear</button>
                 )}
               </div>
             </div>

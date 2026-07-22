@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import SignatureCanvas from 'react-signature-canvas'
 import { api } from '../lib/api'
 import type { FormField } from '../lib/types'
-import { buildSignedPdf, renderPage } from '../lib/pdf'
+import { buildSignedPdf, formatSignedDate, renderPage } from '../lib/pdf'
 import { Logo } from '../components/Logo'
 
 const RENDER_WIDTH = 720
@@ -37,7 +37,8 @@ export function SignPage() {
         const customValueByField = Object.fromEntries(s.record.custom_values.map((v) => [v.field_id, v.value]))
         for (const f of s.fields) {
           if (f.custom_field_id && customValueByField[f.custom_field_id]) seed[f.id] = customValueByField[f.custom_field_id]
-          else if (f.type === 'date' || f.type === 'signed_date') seed[f.id] = today
+          else if (f.type === 'signed_date') seed[f.id] = formatSignedDate(new Date())
+          else if (f.type === 'date') seed[f.id] = today
           else if (f.type === 'email') seed[f.id] = s.record.signer_email
         }
         setValues(seed)
@@ -60,7 +61,13 @@ export function SignPage() {
     setError(null)
     setSubmitting(true)
     try {
-      const valueRows = session.fields.filter((f) => values[f.id]).map((f) => ({ field_id: f.id, value: values[f.id] }))
+      // Stamp signed-date fields with the actual moment of submission, not
+      // whenever the page happened to load (the signer may have opened the
+      // link and taken a while to finish).
+      const finalValues = { ...values }
+      const submittedAt = formatSignedDate(new Date())
+      for (const f of session.fields) if (f.type === 'signed_date') finalValues[f.id] = submittedAt
+      const valueRows = session.fields.filter((f) => finalValues[f.id]).map((f) => ({ field_id: f.id, value: finalValues[f.id] }))
       const signed = await buildSignedPdf(pdfBytes, session.fields, valueRows)
       const pdfBase64 = bytesToBase64(signed)
       await api.submitSignature(token!, { values: valueRows, pdfBase64 })
@@ -95,7 +102,7 @@ function SignablePage({ pdfBytes, pageIndex, fields, values, onText, onSignReque
   const [size, setSize] = useState({ w: RENDER_WIDTH, h: RENDER_WIDTH * 1.3 })
   useEffect(() => { if (canvasRef.current) renderPage(pdfBytes, pageIndex, canvasRef.current, RENDER_WIDTH).then((d) => setSize({ w: d.width, h: d.height })) }, [pdfBytes, pageIndex])
   const isSig = (t: string) => t === 'signature' || t === 'initials'
-  return <div className="card mx-auto inline-block overflow-hidden p-0" style={{ maxWidth: '100%' }}><div className="relative" style={{ width: size.w, height: size.h, maxWidth: '100%' }}><canvas ref={canvasRef} className="block w-full" />{fields.map((f) => { const style = { left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%` } as const; const filled = Boolean(values[f.id]); if (isSig(f.type)) return <button key={f.id} onClick={() => onSignRequest(f.id)} className="absolute overflow-hidden rounded border-2 border-dashed" style={{ ...style, borderColor: filled ? '#16a34a' : '#E11B22', background: filled ? '#fff' : 'rgba(225,27,34,0.1)' }}>{filled ? <img src={values[f.id]} className="h-full w-full object-contain" alt="signature" /> : <span className="text-[10px] font-semibold uppercase text-cti-red">Tap to Sign</span>}</button>; if (f.type === 'textarea') return <textarea key={f.id} value={values[f.id] ?? ''} onChange={(e) => onText(f.id, e.target.value)} readOnly={Boolean(f.custom_field_id)} placeholder={f.label || f.type} className="absolute resize-none rounded border border-cti-blue bg-blue-50/60 px-1 py-1 text-xs outline-none focus:bg-white read-only:border-transparent read-only:bg-white/30" style={style} />; return <input key={f.id} value={values[f.id] ?? ''} onChange={(e) => onText(f.id, e.target.value)} readOnly={Boolean(f.custom_field_id) || f.type === 'signed_date'} type={f.type === 'date' || f.type === 'signed_date' ? 'date' : f.type === 'email' ? 'email' : f.type === 'number' ? 'number' : 'text'} placeholder={f.label || f.type} className="absolute rounded border border-cti-blue bg-blue-50/60 px-1 text-xs outline-none focus:bg-white read-only:border-transparent read-only:bg-white/30" style={style} /> })}</div></div>
+  return <div className="card mx-auto inline-block overflow-hidden p-0" style={{ maxWidth: '100%' }}><div className="relative" style={{ width: size.w, height: size.h, maxWidth: '100%' }}><canvas ref={canvasRef} className="block w-full" />{fields.map((f) => { const style = { left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%` } as const; const filled = Boolean(values[f.id]); if (isSig(f.type)) return <button key={f.id} onClick={() => onSignRequest(f.id)} className="absolute overflow-hidden rounded border-2 border-dashed" style={{ ...style, borderColor: filled ? '#16a34a' : '#E11B22', background: filled ? '#fff' : 'rgba(225,27,34,0.1)' }}>{filled ? <img src={values[f.id]} className="h-full w-full object-contain" alt="signature" /> : <span className="text-[10px] font-semibold uppercase text-cti-red">Tap to Sign</span>}</button>; if (f.type === 'textarea') return <textarea key={f.id} value={values[f.id] ?? ''} onChange={(e) => onText(f.id, e.target.value)} readOnly={Boolean(f.custom_field_id)} placeholder={f.label || f.type} className="absolute resize-none rounded border border-cti-blue bg-blue-50/60 px-1 py-1 text-xs outline-none focus:bg-white read-only:border-transparent read-only:bg-white/30" style={style} />; return <input key={f.id} value={values[f.id] ?? ''} onChange={(e) => onText(f.id, e.target.value)} readOnly={Boolean(f.custom_field_id) || f.type === 'signed_date'} type={f.type === 'date' ? 'date' : f.type === 'email' ? 'email' : f.type === 'number' ? 'number' : 'text'} placeholder={f.label || f.type} className="absolute rounded border border-cti-blue bg-blue-50/60 px-1 text-xs outline-none focus:bg-white read-only:border-transparent read-only:bg-white/30" style={style} /> })}</div></div>
 }
 
 function SignaturePad({ onDone, onCancel }: { onDone: (dataUrl: string) => void; onCancel: () => void }) {

@@ -144,6 +144,13 @@ export async function detectFormFields(templateBytes: ArrayBuffer): Promise<Dete
   return results
 }
 
+/** "Signed on July 22, 2026, 3:45 PM" — long date + time, for the Signed Date field. */
+export function formatSignedDate(date: Date): string {
+  const longDate = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return `Signed on ${longDate}, ${time}`
+}
+
 function dataUrlToBytes(dataUrl: string): Uint8Array {
   const base64 = dataUrl.split(',')[1]
   const bin = atob(base64)

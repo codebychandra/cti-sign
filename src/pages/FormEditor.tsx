@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import type { CustomFieldType, FieldType, Form, FormField, ProjectCustomField, TextAlign } from '../lib/types'
-import { detectFormFields, getPageCount, renderPage, type DetectedField } from '../lib/pdf'
+import { detectFormFields, formatSignedDate, getPageCount, renderPage, type DetectedField } from '../lib/pdf'
 import { PageHeader } from '../components/Layout'
 
 const RENDER_WIDTH = 720
@@ -366,7 +366,7 @@ function sampleValue(field: FormField, customFields: ProjectCustomField[]) {
   const label = field.label.toLowerCase()
   if (field.type === 'signature') return 'Agus Chandra'
   if (field.type === 'initials') return 'AC'
-  if (field.type === 'signed_date') return '2026-07-16'
+  if (field.type === 'signed_date') return formatSignedDate(new Date())
   if (field.type === 'date') return '2026-07-16'
   if (field.type === 'number') return '12345'
   if (field.type === 'email') return 'cti-it-team@cti-usa.com'

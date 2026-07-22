@@ -327,9 +327,10 @@ async function recordDetails(env: Env, record: SignRecord): Promise<{ label: str
     .filter((d) => d.value)
 }
 
-// "Project Name_Name.pdf" — matches the client's downloadFilename convention
-// (src/pages/ProjectDetail.tsx) so downloads and OneDrive saves are named alike.
-async function buildDocumentFilename(env: Env, record: SignRecord): Promise<string> {
+// "Project Name_Name" — matches the client's downloadFilename convention
+// (src/pages/ProjectDetail.tsx) so downloads, OneDrive saves, and email
+// subjects/attachments all identify a document the same way.
+async function buildDocumentTitle(env: Env, record: SignRecord): Promise<string> {
   const [projects, customFields] = await Promise.all([
     getCollection<Project>(env, 'projects'),
     getCollection<ProjectCustomField>(env, 'project_custom_fields'),
@@ -338,8 +339,12 @@ async function buildDocumentFilename(env: Env, record: SignRecord): Promise<stri
   const nameField = customFields.find((f) => f.project_id === record.project_id && f.label.trim().toLowerCase() === 'name')
   const nameValue = (nameField && record.custom_values.find((v) => v.field_id === nameField.id)?.value?.trim()) || record.signer_name
   const parts = [project?.name, nameValue].filter((p): p is string => Boolean(p && p.trim()))
-  const safe = parts.join('_').replace(/[^\w.() -]+/g, '').trim()
-  return `${safe || 'Document'}.pdf`
+  return parts.join('_').trim() || 'Document'
+}
+
+async function buildDocumentFilename(env: Env, record: SignRecord): Promise<string> {
+  const title = await buildDocumentTitle(env, record)
+  return `${title.replace(/[^\w.() -]+/g, '')}.pdf`
 }
 
 async function handleSendSignatureRequest(request: Request, env: Env): Promise<Response> {
@@ -356,7 +361,8 @@ async function handleSendSignatureRequest(request: Request, env: Env): Promise<R
 
   if (isGraphEmailConfigured(env)) {
     const details = await recordDetails(env, record)
-    const result = await sendMailViaGraph(env, record.signer_email, `${docName} – ${record.signer_name} | CTI Group`, signatureEmailHtml(record.signer_name, docName, record.message, link, details))
+    const subject = await buildDocumentTitle(env, record)
+    const result = await sendMailViaGraph(env, record.signer_email, subject, signatureEmailHtml(record.signer_name, docName, record.message, link, details))
     if (!result.ok) return json({ error: 'Microsoft email error: ' + result.error }, 502)
     await markSent(env, record.id)
     return json({ ok: true, emailed: true, provider: 'microsoft-graph' })
@@ -381,11 +387,12 @@ async function handleSendCompletionEmail(request: Request, env: Env): Promise<Re
   if (!signedPdfBase64) return json({ error: 'No signed document found for this record.' }, 404)
 
   const details = await recordDetails(env, record)
+  const subject = await buildDocumentTitle(env, record)
   const attachmentName = await buildDocumentFilename(env, record)
   const result = await sendMailViaGraph(
     env,
     record.signer_email,
-    `Your Signed ${docName} – ${record.signer_name} | CTI Group`,
+    subject,
     completedEmailHtml(record.signer_name, docName, details),
     { name: attachmentName, contentType: 'application/pdf', contentBase64: signedPdfBase64 },
   )

@@ -160,7 +160,7 @@ export function ProjectDetail() {
         show_in_table: newFieldShow,
         auto_prefix: newFieldType === 'auto_number' ? newFieldPrefix.trim() : null,
         auto_start: newFieldType === 'auto_number' ? Number(newFieldStart) || 1 : 1,
-        options: isDropdownType(newFieldType) ? optionTextToList(newFieldOptions) : [],
+        options: isDropdownType(newFieldType) ? optionLinesToList(newFieldOptions) : [],
         sort_order: customFields.length,
       })
     } catch (e) {
@@ -197,7 +197,7 @@ export function ProjectDetail() {
         show_in_table: editFieldShow,
         auto_prefix: editFieldType === 'auto_number' ? editFieldPrefix.trim() : null,
         auto_start: editFieldType === 'auto_number' ? Number(editFieldStart) || 1 : 1,
-        options: isDropdownType(editFieldType) ? optionTextToList(editFieldOptions) : [],
+        options: isDropdownType(editFieldType) ? optionLinesToList(editFieldOptions) : [],
       })
     } catch (e) {
       return setError((e as Error).message)
@@ -892,6 +892,15 @@ function optionTextToList(text: string) {
   return text.split(/\r?\n|,/).map((value) => value.trim()).filter(Boolean)
 }
 
+// Splits on newlines only — for re-parsing a string that's already a list of
+// final option values (one per line), where an option's own text may
+// legitimately contain commas (e.g. "Company | City, Country | Tel: ...").
+// optionTextToList's comma-splitting is only appropriate for raw pasted
+// bulk-add text, never for round-tripping already-finalized options.
+function optionLinesToList(text: string) {
+  return text.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)
+}
+
 function OptionListEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkText, setBulkText] = useState('')
@@ -902,12 +911,12 @@ function OptionListEditor({ value, onChange }: { value: string; onChange: (value
   // `lastEmitted` distinguishes "value changed because we just sent it up"
   // from "value changed because the parent reset it externally" (e.g. after
   // a successful create, or switching which field is being edited).
-  const [options, setOptionsState] = useState<string[]>(() => (value ? optionTextToList(value) : []))
+  const [options, setOptionsState] = useState<string[]>(() => (value ? optionLinesToList(value) : []))
   const lastEmitted = useRef(value)
 
   useEffect(() => {
     if (value !== lastEmitted.current) {
-      setOptionsState(value ? optionTextToList(value) : [])
+      setOptionsState(value ? optionLinesToList(value) : [])
       lastEmitted.current = value
     }
   }, [value])
@@ -957,13 +966,13 @@ function OptionListEditor({ value, onChange }: { value: string; onChange: (value
             rows={4}
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
-            placeholder="One option per line or separated by comma"
+            placeholder="One option per line"
           />
           <button
             type="button"
             className="btn-dark px-3 py-1.5 text-xs"
             onClick={() => {
-              setOptions([...options, ...optionTextToList(bulkText)])
+              setOptions([...options, ...optionLinesToList(bulkText)])
               setBulkText('')
               setBulkMode(false)
             }}

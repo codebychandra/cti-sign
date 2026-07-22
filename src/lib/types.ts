@@ -11,6 +11,7 @@ export interface Project {
   project_type: ProjectType
   message_template: string
   created_at: string
+  deleted_at?: string | null
 }
 
 export interface FormField {

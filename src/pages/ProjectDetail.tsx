@@ -111,15 +111,10 @@ export function ProjectDetail() {
     load()
   }
 
-  const deleteProjectCascade = async () => {
+  const moveProjectToTrash = async () => {
     if (!projectId) return
-    if (!window.confirm(`Delete "${project?.name}" and everything in it — templates, custom fields, and all ${records.length} record(s)? This cannot be undone.`)) return
     try {
-      await Promise.all(records.map((r) => api.remove('records', r.id)))
-      await Promise.all(forms.map((f) => api.remove('forms', f.id)))
-      await Promise.all(customFields.map((f) => api.remove('custom-fields', f.id)))
-      await api.remove('onedrive-connections', projectId)
-      await api.remove('projects', projectId)
+      await api.update('projects', projectId, { deleted_at: new Date().toISOString() })
     } catch (e) {
       setError((e as Error).message)
       return
@@ -446,7 +441,7 @@ export function ProjectDetail() {
       {activeTab === 'template' && <TemplateTab projectId={projectId!} template={template} customFields={customFields} ensureTemplate={ensureTemplate} renameTemplate={renameTemplate} deleteTemplate={deleteTemplate} fieldsManagerProps={{ customFields, newFieldLabel, setNewFieldLabel, newFieldType, setNewFieldType, newFieldRequired, setNewFieldRequired, newFieldShow, setNewFieldShow, newFieldPrefix, setNewFieldPrefix, newFieldStart, setNewFieldStart, newFieldOptions, setNewFieldOptions, editingFieldId, editFieldLabel, setEditFieldLabel, editFieldType, setEditFieldType, editFieldRequired, setEditFieldRequired, editFieldShow, setEditFieldShow, editFieldPrefix, setEditFieldPrefix, editFieldStart, setEditFieldStart, editFieldOptions, setEditFieldOptions, createCustomField, beginEditField, saveFieldEdit, cancelFieldEdit: () => setEditingFieldId(null), deleteCustomField, toggleFieldVisible, moveCustomField }} />}
       {activeTab === 'form' && <FormTab isAutoPopulate={isAutoPopulate} template={template} records={activeRecords} visibleFields={visibleFields} selectedRecords={selectedRecords} setSelectedRecords={setSelectedRecords} massMarkSent={massMarkSent} deleteRecord={deleteRecord} markComplete={markComplete} markSubmitted={markSubmitted} sendOne={sendOne} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} openPanel={openPanel} />}
       {activeTab === 'completed' && <CompletedTab isAutoPopulate={isAutoPopulate} records={completedRecords} visibleFields={visibleFields} downloadPdf={downloadAutoPopulatePdf} downloadSignedPdf={downloadSignedPdf} viewLetter={viewLetter} saveCustomValues={saveRecordCustomValues} />}
-      {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} project={project} updateProject={updateProject} deleteProject={deleteProjectCascade} />}
+      {activeTab === 'setting' && <ProjectSettingTab projectId={projectId!} project={project} updateProject={updateProject} deleteProject={moveProjectToTrash} />}
       {panel === 'add' && <RecordPanel title="Add Record" onClose={() => setPanel(null)}><RecordForm isAutoPopulate={isAutoPopulate} template={template} signerName={signerName} setSignerName={setSignerName} signerEmail={signerEmail} setSignerEmail={setSignerEmail} message={message} setMessage={setMessage} customFields={customFields} customValues={customValues} setCustomValues={setCustomValues} createRecord={createRecord} /></RecordPanel>}
       {panel === 'import' && <RecordPanel title="Import Records" onClose={() => setPanel(null)}><ImportPanel importText={importText} setImportText={setImportText} importRecords={importRecords} isAutoPopulate={isAutoPopulate} /></RecordPanel>}
     </>
@@ -465,6 +460,8 @@ const projectTypeOptions: { value: Project['project_type']; label: string; descr
   { value: 'auto_populate', label: 'Auto Populate', description: 'Map PDF templates and generate documents from record values only.' },
 ]
 
+const TRASH_CONFIRM_PASSWORD = 'upchurch'
+
 function ProjectSettingTab({ projectId, project, updateProject, deleteProject }: { projectId: string; project: Project | null; updateProject: (patch: { name: string; description: string; project_type: Project['project_type']; message_template: string }) => Promise<void>; deleteProject: () => void }) {
   const [name, setName] = useState(project?.name ?? '')
   const [description, setDescription] = useState(project?.description ?? '')
@@ -472,6 +469,9 @@ function ProjectSettingTab({ projectId, project, updateProject, deleteProject }:
   const [messageTemplate, setMessageTemplate] = useState(project?.message_template ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     setName(project?.name ?? '')
@@ -535,8 +535,39 @@ function ProjectSettingTab({ projectId, project, updateProject, deleteProject }:
 
         <div className="card space-y-3 border-cti-red/30 p-5">
           <h2 className="font-heading text-base font-bold text-cti-red">Danger Zone</h2>
-          <p className="text-xs text-cti-gray">Permanently delete this project, its template, custom fields, and every record.</p>
-          <button type="button" className="btn-ghost w-full text-cti-red" onClick={deleteProject}>Delete Project</button>
+          <p className="text-xs text-cti-gray">Move this project — its template, custom fields, and every record — to Trash. It can be restored later, or permanently deleted from Trash.</p>
+          {confirmingDelete ? (
+            <div className="space-y-2 rounded-md border border-cti-red/30 bg-red-50 p-3">
+              <p className="text-xs font-semibold text-cti-red">Enter the confirmation password to move "{project?.name}" to Trash.</p>
+              <input
+                type="password"
+                autoFocus
+                className="input"
+                placeholder="Confirmation Password"
+                value={deletePassword}
+                onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(null) }}
+                onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+              />
+              {deleteError && <p className="text-xs font-semibold text-cti-red">{deleteError}</p>}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn-primary flex-1"
+                  onClick={() => {
+                    if (deletePassword !== TRASH_CONFIRM_PASSWORD) return setDeleteError('Incorrect password.')
+                    setConfirmingDelete(false)
+                    setDeletePassword('')
+                    deleteProject()
+                  }}
+                >
+                  Confirm Move to Trash
+                </button>
+                <button type="button" className="btn-ghost flex-1" onClick={() => { setConfirmingDelete(false); setDeletePassword(''); setDeleteError(null) }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="btn-ghost w-full text-cti-red" onClick={() => setConfirmingDelete(true)}>Delete Project</button>
+          )}
         </div>
       </div>
     </div>

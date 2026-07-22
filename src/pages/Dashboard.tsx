@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import type { Project, ProjectType } from '../lib/types'
+import type { Form, Project, ProjectCustomField, ProjectType, SignRecord } from '../lib/types'
 import { PageHeader } from '../components/Layout'
 
 const projectTypes: { value: ProjectType; label: string; description: string }[] = [
@@ -10,23 +10,55 @@ const projectTypes: { value: ProjectType; label: string; description: string }[]
 ]
 
 export function Dashboard() {
-  const [projects, setProjects] = useState<Project[]>([])
+  const [allProjects, setAllProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [showTrash, setShowTrash] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [projectType, setProjectType] = useState<ProjectType>('sent_signature')
   const [error, setError] = useState<string | null>(null)
 
+  const projects = allProjects.filter((p) => !p.deleted_at)
+  const trashedProjects = allProjects.filter((p) => p.deleted_at)
+
   const load = async () => {
     setLoading(true)
     try {
       const data = await api.list<Project>('projects')
-      setProjects(data.map((project) => ({ ...project, project_type: project.project_type ?? 'sent_signature' })).sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      setAllProjects(data.map((project) => ({ ...project, project_type: project.project_type ?? 'sent_signature' })).sort((a, b) => b.created_at.localeCompare(a.created_at)))
     } catch (e) {
       setError((e as Error).message)
     }
     setLoading(false)
+  }
+
+  const restoreProject = async (projectId: string) => {
+    try {
+      await api.update('projects', projectId, { deleted_at: null })
+    } catch (e) {
+      return setError((e as Error).message)
+    }
+    load()
+  }
+
+  const permanentlyDeleteProject = async (project: Project) => {
+    if (!window.confirm(`Permanently delete "${project.name}" and everything in it? This cannot be undone.`)) return
+    try {
+      const [records, forms, customFields] = await Promise.all([
+        api.list<SignRecord>('records', { project_id: project.id }),
+        api.list<Form>('forms', { project_id: project.id }),
+        api.list<ProjectCustomField>('custom-fields', { project_id: project.id }),
+      ])
+      await Promise.all(records.map((r) => api.remove('records', r.id)))
+      await Promise.all(forms.map((f) => api.remove('forms', f.id)))
+      await Promise.all(customFields.map((f) => api.remove('custom-fields', f.id)))
+      await api.remove('onedrive-connections', project.id)
+      await api.remove('projects', project.id)
+    } catch (e) {
+      return setError((e as Error).message)
+    }
+    load()
   }
 
   useEffect(() => {
@@ -55,9 +87,14 @@ export function Dashboard() {
         title="Projects"
         subtitle="Group Your Signing Workflows"
         actions={
-          <button className="btn-primary" onClick={() => setCreating((v) => !v)}>
-            {creating ? 'Cancel' : '+ New Project'}
-          </button>
+          <div className="flex gap-2">
+            <button className="btn-ghost" onClick={() => setShowTrash((v) => !v)}>
+              {showTrash ? 'Back to Projects' : `Trash${trashedProjects.length > 0 ? ` (${trashedProjects.length})` : ''}`}
+            </button>
+            <button className="btn-primary" onClick={() => setCreating((v) => !v)}>
+              {creating ? 'Cancel' : '+ New Project'}
+            </button>
+          </div>
         }
       />
 
@@ -106,6 +143,31 @@ export function Dashboard() {
 
       {loading ? (
         <p className="text-cti-gray">Loading…</p>
+      ) : showTrash ? (
+        trashedProjects.length === 0 ? (
+          <div className="card grid place-items-center p-12 text-center text-cti-gray">
+            <p>Trash is empty.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {trashedProjects.map((p) => (
+              <div key={p.id} className="card space-y-3 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-heading font-bold text-cti-black">{p.name}</h3>
+                  <span className="badge bg-cti-bg text-cti-gray">
+                    {p.project_type === 'auto_populate' ? 'Auto Populate' : 'Sent Signature'}
+                  </span>
+                </div>
+                {p.description && <p className="text-sm text-cti-gray">{p.description}</p>}
+                <p className="text-xs text-cti-gray">Deleted {p.deleted_at ? new Date(p.deleted_at).toLocaleDateString() : ''}</p>
+                <div className="flex gap-2">
+                  <button className="btn-ghost flex-1" onClick={() => restoreProject(p.id)}>Restore</button>
+                  <button className="btn-ghost flex-1 text-cti-red" onClick={() => permanentlyDeleteProject(p)}>Delete Forever</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : projects.length === 0 ? (
         <div className="card grid place-items-center p-12 text-center text-cti-gray">
           <p>No projects yet. Create your first one to get started.</p>

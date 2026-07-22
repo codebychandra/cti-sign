@@ -31,7 +31,7 @@ export function SignPage() {
       try {
         const s = (await api.getSigningSession(token!)) as Session
         setSession(s)
-        if (s.record.status === 'completed') setDone(true)
+        if (s.record.status === 'submitted' || s.record.status === 'completed') setDone(true)
         const today = new Date().toISOString().slice(0, 10)
         const seed: Record<string, string> = {}
         const customValueByField = Object.fromEntries(s.record.custom_values.map((v) => [v.field_id, v.value]))

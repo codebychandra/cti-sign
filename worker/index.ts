@@ -303,7 +303,7 @@ async function handleSubmitSignature(token: string, request: Request, env: Env):
   const records = await getCollection<SignRecord>(env, 'records')
   const record = records.find((r) => r.token === token)
   if (!record) return json({ error: 'Invalid signing link' }, 404)
-  if (record.status === 'completed') return json({ error: 'This document has already been signed' }, 409)
+  if (record.status === 'submitted' || record.status === 'completed') return json({ error: 'This document has already been signed' }, 409)
 
   const stored = await putPdf(env, `signed_pdf_${record.id}`, body.pdfBase64)
   if (!stored.ok) return json({ error: stored.error }, 413)

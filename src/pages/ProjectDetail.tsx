@@ -382,7 +382,7 @@ export function ProjectDetail() {
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
       const a = document.createElement('a')
       a.href = url
-      a.download = `${record.signer_name.replace(/\s+/g, '_')}_signed.pdf`
+      a.download = downloadFilename(project?.name ?? 'Document', record, customFields)
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -405,7 +405,7 @@ export function ProjectDetail() {
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
       const a = document.createElement('a')
       a.href = url
-      a.download = `${(project?.name ?? 'record').replace(/\s+/g, '_')}-${record.id.slice(0, 8)}.pdf`
+      a.download = downloadFilename(project?.name ?? 'Document', record, customFields)
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -1015,6 +1015,19 @@ function inputTypeForCustomField(field: ProjectCustomField) {
   if (field.type === 'email') return 'email'
   if (field.type === 'number') return 'number'
   return 'text'
+}
+
+// "{Doc Name}_{Name}_{Id Number}.pdf" — falls back gracefully when a project
+// has no field literally labeled "Name" (uses signer_name) or no auto-number
+// field (drops that segment entirely) so this works for any project shape.
+function downloadFilename(docName: string, record: SignRecord, customFields: ProjectCustomField[]): string {
+  const valueFor = (field?: ProjectCustomField) => field && record.custom_values.find((v) => v.field_id === field.id)?.value?.trim()
+  const nameField = customFields.find((f) => f.label.trim().toLowerCase() === 'name')
+  const idField = customFields.find((f) => f.type === 'auto_number')
+  const nameValue = valueFor(nameField) || record.signer_name
+  const idValue = valueFor(idField)
+  const parts = [docName, nameValue, idValue].filter((p): p is string => Boolean(p && p.trim()))
+  return `${parts.join('_')}.pdf`
 }
 
 function appBaseUrl() {

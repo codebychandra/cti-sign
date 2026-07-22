@@ -1083,10 +1083,8 @@ function buildAutoPopulateValues(formFields: Form['fields'], customVals: SignRec
 function downloadFilename(docName: string, record: SignRecord, customFields: ProjectCustomField[]): string {
   const valueFor = (field?: ProjectCustomField) => field && record.custom_values.find((v) => v.field_id === field.id)?.value?.trim()
   const nameField = customFields.find((f) => f.label.trim().toLowerCase() === 'name')
-  const idField = customFields.find((f) => f.type === 'auto_number')
   const nameValue = valueFor(nameField) || record.signer_name
-  const idValue = valueFor(idField)
-  const parts = [docName, nameValue, idValue].filter((p): p is string => Boolean(p && p.trim()))
+  const parts = [docName, nameValue].filter((p): p is string => Boolean(p && p.trim()))
   return `${parts.join('_')}.pdf`
 }
 

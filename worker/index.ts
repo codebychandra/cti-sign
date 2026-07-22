@@ -327,6 +327,21 @@ async function recordDetails(env: Env, record: SignRecord): Promise<{ label: str
     .filter((d) => d.value)
 }
 
+// "Project Name_Name.pdf" — matches the client's downloadFilename convention
+// (src/pages/ProjectDetail.tsx) so downloads and OneDrive saves are named alike.
+async function buildDocumentFilename(env: Env, record: SignRecord): Promise<string> {
+  const [projects, customFields] = await Promise.all([
+    getCollection<Project>(env, 'projects'),
+    getCollection<ProjectCustomField>(env, 'project_custom_fields'),
+  ])
+  const project = projects.find((p) => p.id === record.project_id)
+  const nameField = customFields.find((f) => f.project_id === record.project_id && f.label.trim().toLowerCase() === 'name')
+  const nameValue = (nameField && record.custom_values.find((v) => v.field_id === nameField.id)?.value?.trim()) || record.signer_name
+  const parts = [project?.name, nameValue].filter((p): p is string => Boolean(p && p.trim()))
+  const safe = parts.join('_').replace(/[^\w.() -]+/g, '').trim()
+  return `${safe || 'Document'}.pdf`
+}
+
 async function handleSendSignatureRequest(request: Request, env: Env): Promise<Response> {
   const body = (await request.json()) as { recordId?: string; appUrl?: string }
   if (!body.recordId || !body.appUrl) return json({ error: 'Missing recordId or appUrl' }, 400)
@@ -366,12 +381,13 @@ async function handleSendCompletionEmail(request: Request, env: Env): Promise<Re
   if (!signedPdfBase64) return json({ error: 'No signed document found for this record.' }, 404)
 
   const details = await recordDetails(env, record)
+  const attachmentName = await buildDocumentFilename(env, record)
   const result = await sendMailViaGraph(
     env,
     record.signer_email,
     `Your Signed ${docName} – ${record.signer_name} | CTI Group`,
     completedEmailHtml(record.signer_name, docName, details),
-    { name: `${docName.replace(/\s+/g, '_')}_signed.pdf`, contentType: 'application/pdf', contentBase64: signedPdfBase64 },
+    { name: attachmentName, contentType: 'application/pdf', contentBase64: signedPdfBase64 },
   )
   if (!result.ok) return json({ error: 'Microsoft email error: ' + result.error }, 502)
   return json({ ok: true, emailed: true, provider: 'microsoft-graph' })
@@ -480,7 +496,7 @@ async function odUpload({ record_id }: { record_id: string }, env: Env) {
   })
   if (!token.ok) return json({ error: token.error }, 502)
 
-  const filename = `${(record.signer_name || 'record').replace(/[^\w.-]+/g, '_')}-${record.id.slice(0, 8)}.pdf`
+  const filename = await buildDocumentFilename(env, record)
   const bytes = Uint8Array.from(atob(signedBase64), (c) => c.charCodeAt(0))
   const uploaded = await uploadToGraphFolder(token.accessToken, conn.folder_id, filename, bytes)
   if (!uploaded.ok) return json({ error: uploaded.error }, 502)

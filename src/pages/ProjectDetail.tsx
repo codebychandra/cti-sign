@@ -544,7 +544,34 @@ function ProjectSettingTab({ projectId, project, updateProject, deleteProject }:
 }
 
 function FormTab(props: { isAutoPopulate: boolean; template?: Form; records: SignRecord[]; visibleFields: ProjectCustomField[]; selectedRecords: Record<string, boolean>; setSelectedRecords: React.Dispatch<React.SetStateAction<Record<string, boolean>>>; massMarkSent: () => void; deleteRecord: (recordId: string) => void; markComplete: (recordId: string) => void; markSubmitted: (recordId: string) => void; sendOne: (recordId: string) => void; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; viewLetter: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void>; openPanel: (mode: PanelMode) => void }) {
-  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-heading text-lg font-bold text-cti-black">Records</h2><p className="text-sm text-cti-gray">{props.template?.has_template ? 'Table uses visible columns from the Template tab. Cell values save inline; use the action icons for send, timeline, letter, reminder, complete and delete.' : 'Create and map a template before adding records.'}</p></div><div className="flex gap-2"><button className="btn-ghost" onClick={() => props.openPanel('import')} disabled={!props.template?.has_template}>Import Records</button><button className="btn-primary" onClick={() => props.openPanel('add')} disabled={!props.template?.has_template}>+ Add Record</button>{!props.isAutoPopulate && <button className="btn-dark" onClick={props.massMarkSent}>Mass Send</button>}</div></div><RecordsTable isAutoPopulate={props.isAutoPopulate} records={props.records} fields={props.visibleFields} selectedRecords={props.selectedRecords} setSelectedRecords={props.setSelectedRecords} deleteRecord={props.deleteRecord} markComplete={props.markComplete} markSubmitted={props.markSubmitted} sendOne={props.sendOne} downloadPdf={props.downloadPdf} downloadSignedPdf={props.downloadSignedPdf} viewLetter={props.viewLetter} saveCustomValues={props.saveCustomValues} completed={false} /></section>
+  const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
+  const [savingAll, setSavingAll] = useState(false)
+  const pendingCount = Object.keys(pending).length
+
+  const registerDirty = (recordId: string, values: Record<string, string> | null) => {
+    setPending((prev) => {
+      if (values === null) {
+        if (!(recordId in prev)) return prev
+        const next = { ...prev }
+        delete next[recordId]
+        return next
+      }
+      return { ...prev, [recordId]: values }
+    })
+  }
+
+  const saveAll = async () => {
+    setSavingAll(true)
+    try {
+      await Promise.all(Object.entries(pending).map(([id, values]) => props.saveCustomValues(id, values)))
+      setPending({})
+    } catch {
+      // error already surfaced by the parent
+    }
+    setSavingAll(false)
+  }
+
+  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-heading text-lg font-bold text-cti-black">Records</h2><p className="text-sm text-cti-gray">{props.template?.has_template ? 'Table uses visible columns from the Template tab. Cell values save inline; use the action icons for send, timeline, letter, reminder, complete and delete.' : 'Create and map a template before adding records.'}</p></div><div className="flex items-center gap-2"><IconButton label={pendingCount > 0 ? `Save All (${pendingCount} unsaved)` : 'Save All'} size="md" disabled={pendingCount === 0 || savingAll} onClick={saveAll}><SaveIcon /></IconButton><button className="btn-ghost" onClick={() => props.openPanel('import')} disabled={!props.template?.has_template}>Import Records</button><button className="btn-primary" onClick={() => props.openPanel('add')} disabled={!props.template?.has_template}>+ Add Record</button>{!props.isAutoPopulate && <button className="btn-dark" onClick={props.massMarkSent}>Mass Send</button>}</div></div><RecordsTable isAutoPopulate={props.isAutoPopulate} records={props.records} fields={props.visibleFields} selectedRecords={props.selectedRecords} setSelectedRecords={props.setSelectedRecords} deleteRecord={props.deleteRecord} markComplete={props.markComplete} markSubmitted={props.markSubmitted} sendOne={props.sendOne} downloadPdf={props.downloadPdf} downloadSignedPdf={props.downloadSignedPdf} viewLetter={props.viewLetter} saveCustomValues={props.saveCustomValues} completed={false} onDirtyChange={registerDirty} /></section>
 }
 
 function CompletedTab({ isAutoPopulate, records, visibleFields, downloadPdf, downloadSignedPdf, viewLetter, saveCustomValues }: { isAutoPopulate: boolean; records: SignRecord[]; visibleFields: ProjectCustomField[]; downloadPdf: (record: SignRecord) => void; downloadSignedPdf: (record: SignRecord) => void; viewLetter: (record: SignRecord) => void; saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void> }) {
@@ -589,6 +616,10 @@ function PencilIcon() {
   return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M13.5 3.5a1.7 1.7 0 0 1 2.4 2.4L6.5 15.3l-3.2.7.7-3.2 9.5-9.3Z" /></svg>
 }
 
+function SaveIcon() {
+  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M4 3.5h9.5L16.5 6.5V16a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5Z" /><path d="M6.5 3.5V8h6V3.5M6.5 16.5v-5h7v5" /></svg>
+}
+
 function TrashIcon() {
   return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M3.5 5.5h13M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M6 5.5v10a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-10M8.5 9v4M11.5 9v4" /></svg>
 }
@@ -620,44 +651,14 @@ type RecordsTableProps = {
   viewLetter: (record: SignRecord) => void
   saveCustomValues: (recordId: string, values: Record<string, string>) => Promise<void>
   completed: boolean
+  onDirtyChange?: (recordId: string, values: Record<string, string> | null) => void
 }
 
 function RecordsTable(props: RecordsTableProps) {
-  const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
-  const [savingAll, setSavingAll] = useState(false)
-  const pendingCount = Object.keys(pending).length
-
-  const registerDirty = (recordId: string, values: Record<string, string> | null) => {
-    setPending((prev) => {
-      if (values === null) {
-        if (!(recordId in prev)) return prev
-        const next = { ...prev }
-        delete next[recordId]
-        return next
-      }
-      return { ...prev, [recordId]: values }
-    })
-  }
-
-  const saveAll = async () => {
-    setSavingAll(true)
-    try {
-      await Promise.all(Object.entries(pending).map(([id, values]) => props.saveCustomValues(id, values)))
-      setPending({})
-    } catch {
-      // error already surfaced by the parent
-    }
-    setSavingAll(false)
-  }
+  const registerDirty = (recordId: string, values: Record<string, string> | null) => props.onDirtyChange?.(recordId, values)
 
   return (
     <div className="space-y-2">
-      {pendingCount > 0 && (
-        <div className="flex items-center justify-end gap-2">
-          <span className="text-xs font-semibold text-cti-gray">{pendingCount} row{pendingCount > 1 ? 's' : ''} with unsaved changes</span>
-          <button type="button" className="btn-primary px-3 py-1.5 text-xs" onClick={saveAll} disabled={savingAll}>{savingAll ? 'Saving…' : `Save All (${pendingCount})`}</button>
-        </div>
-      )}
       <div className="card overflow-x-auto p-0">
         <table className="w-full border-collapse text-center text-sm">
           <thead className="border-b border-cti-line bg-cti-bg text-xs uppercase tracking-wide text-cti-gray">

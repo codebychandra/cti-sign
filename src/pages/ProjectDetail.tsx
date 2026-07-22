@@ -623,32 +623,66 @@ type RecordsTableProps = {
 }
 
 function RecordsTable(props: RecordsTableProps) {
+  const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
+  const [savingAll, setSavingAll] = useState(false)
+  const pendingCount = Object.keys(pending).length
+
+  const registerDirty = (recordId: string, values: Record<string, string> | null) => {
+    setPending((prev) => {
+      if (values === null) {
+        if (!(recordId in prev)) return prev
+        const next = { ...prev }
+        delete next[recordId]
+        return next
+      }
+      return { ...prev, [recordId]: values }
+    })
+  }
+
+  const saveAll = async () => {
+    setSavingAll(true)
+    try {
+      await Promise.all(Object.entries(pending).map(([id, values]) => props.saveCustomValues(id, values)))
+      setPending({})
+    } catch {
+      // error already surfaced by the parent
+    }
+    setSavingAll(false)
+  }
+
   return (
-    <div className="card overflow-x-auto p-0">
-      <table className="w-full border-collapse text-center text-sm">
-        <thead className="border-b border-cti-line bg-cti-bg text-xs uppercase tracking-wide text-cti-gray">
-          <tr>
-            <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Action</th>
-            <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Status</th>
-            <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Created</th>
-            {!props.isAutoPopulate && <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Signer</th>}
-            {props.fields.map((field, i) => <th key={field.id} className={`whitespace-nowrap px-4 py-3 ${i < props.fields.length - 1 ? 'border-r border-cti-line' : ''}`}>{field.label}</th>)}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-cti-line">
-          {props.records.length === 0 && <tr><td colSpan={props.fields.length + 4} className="px-4 py-6 text-center text-cti-gray">No Records.</td></tr>}
-          {props.records.map((record) => <RecordRow key={record.id} record={record} {...props} />)}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {pendingCount > 0 && (
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-xs font-semibold text-cti-gray">{pendingCount} row{pendingCount > 1 ? 's' : ''} with unsaved changes</span>
+          <button type="button" className="btn-primary px-3 py-1.5 text-xs" onClick={saveAll} disabled={savingAll}>{savingAll ? 'Saving…' : `Save All (${pendingCount})`}</button>
+        </div>
+      )}
+      <div className="card overflow-x-auto p-0">
+        <table className="w-full border-collapse text-center text-sm">
+          <thead className="border-b border-cti-line bg-cti-bg text-xs uppercase tracking-wide text-cti-gray">
+            <tr>
+              <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Action</th>
+              <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Status</th>
+              <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Created</th>
+              {!props.isAutoPopulate && <th className="whitespace-nowrap border-r border-cti-line px-4 py-3">Signer</th>}
+              {props.fields.map((field, i) => <th key={field.id} className={`whitespace-nowrap px-4 py-3 ${i < props.fields.length - 1 ? 'border-r border-cti-line' : ''}`}>{field.label}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-cti-line">
+            {props.records.length === 0 && <tr><td colSpan={props.fields.length + 4} className="px-4 py-6 text-center text-cti-gray">No Records.</td></tr>}
+            {props.records.map((record) => <RecordRow key={record.id} record={record} onDirtyChange={registerDirty} {...props} />)}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
 
-function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
+function RecordRow(props: RecordsTableProps & { record: SignRecord; onDirtyChange: (recordId: string, values: Record<string, string> | null) => void }) {
   const { record } = props
   const [values, setValues] = useState<Record<string, string>>(() => valuesFromRecord(record, props.fields))
   const [savedValues, setSavedValues] = useState(values)
-  const [saving, setSaving] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
   const isSubmitted = record.status === 'submitted'
   const dirty = JSON.stringify(values) !== JSON.stringify(savedValues)
@@ -660,16 +694,10 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record.id, record.custom_values])
 
-  const save = async () => {
-    setSaving(true)
-    try {
-      await props.saveCustomValues(record.id, values)
-      setSavedValues(values)
-    } catch {
-      // error already surfaced by the parent
-    }
-    setSaving(false)
-  }
+  useEffect(() => {
+    props.onDirtyChange(record.id, dirty ? values : null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, values, record.id])
 
   const downloadAndAdvance = () => {
     props.downloadPdf(record)
@@ -688,7 +716,6 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord }) {
           {!props.completed && !props.isAutoPopulate && isSubmitted && <SendButton label="Complete" onClick={() => props.markComplete(record.id)} />}
           {!props.completed && props.isAutoPopulate && record.status === 'draft' && <SendButton label="Download" onClick={downloadAndAdvance} />}
           {!props.completed && props.isAutoPopulate && record.status !== 'draft' && <SendButton label="Complete" onClick={() => props.markComplete(record.id)} />}
-          {dirty && <RowActionIcon label="Save Changes" tone="save" onClick={save} disabled={saving}><SaveIcon /></RowActionIcon>}
           {!props.isAutoPopulate && <TimelineButton record={record} open={showTimeline} onToggle={() => setShowTimeline((v) => !v)} />}
           <RowActionIcon label="View Letter" tone="letter" onClick={() => props.viewLetter(record)}><LetterIcon /></RowActionIcon>
           {!props.completed && !props.isAutoPopulate && <RowActionIcon label="Send Reminder" tone="reminder" onClick={() => props.sendOne(record.id)}><BellIcon /></RowActionIcon>}
@@ -785,7 +812,6 @@ function PendingBadge() {
 }
 
 const rowActionTones = {
-  save: 'border-cti-red bg-cti-red text-white hover:bg-cti-redDark',
   timeline: 'border-green-500 bg-white text-green-600 hover:bg-green-50',
   letter: 'border-cti-blue bg-white text-cti-blue hover:bg-blue-50',
   reminder: 'border-amber-400 bg-white text-amber-500 hover:bg-amber-50',
@@ -823,10 +849,6 @@ function DownloadIcon() {
 
 function UploadIcon() {
   return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M10 13V3.5M6.5 7l3.5-3.5L13.5 7" /><path d="M3.5 14v1.5a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V14" /></svg>
-}
-
-function SaveIcon() {
-  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M4 3.5h9L16.5 7v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" /><path d="M6.5 3.5V8h6V3.5M6.5 17v-5h7v5" /></svg>
 }
 
 function CustomValueInputs({ fields, values, setValues }: { fields: ProjectCustomField[]; values: Record<string, string>; setValues: React.Dispatch<React.SetStateAction<Record<string, string>>> }) {

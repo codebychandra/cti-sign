@@ -749,10 +749,8 @@ function RecordRow(props: RecordsTableProps & { record: SignRecord; onDirtyChang
           {!props.completed && props.isAutoPopulate && record.status === 'draft' && <SendButton label="Download" onClick={downloadAndAdvance} />}
           {!props.completed && props.isAutoPopulate && record.status !== 'draft' && <SendButton label="Complete" onClick={() => props.markComplete(record.id)} />}
           {!props.isAutoPopulate && <TimelineButton record={record} open={showTimeline} onToggle={() => setShowTimeline((v) => !v)} />}
-          <RowActionIcon label="View Letter" tone="letter" onClick={() => props.viewLetter(record)}><LetterIcon /></RowActionIcon>
+          {!props.completed && <RowActionIcon label="View Letter" tone="letter" onClick={() => props.viewLetter(record)}><LetterIcon /></RowActionIcon>}
           {!props.completed && !props.isAutoPopulate && <RowActionIcon label="Send Reminder" tone="reminder" onClick={() => props.sendOne(record.id)}><BellIcon /></RowActionIcon>}
-          {props.completed && props.isAutoPopulate && <RowActionIcon label="Download PDF" tone="neutral" onClick={() => props.downloadPdf(record)}><DownloadIcon /></RowActionIcon>}
-          {props.completed && !props.isAutoPopulate && <RowActionIcon label="Download Signed PDF" tone="neutral" onClick={() => props.downloadSignedPdf(record)}><DownloadIcon /></RowActionIcon>}
           {props.completed && !props.isAutoPopulate && record.onedrive_url && <RowActionIcon label="Open Copy in OneDrive" tone="letter" onClick={() => window.open(record.onedrive_url!, '_blank')}><ExternalLinkIcon /></RowActionIcon>}
           {!props.completed && <RowActionIcon label="Delete Record" tone="danger" onClick={() => props.deleteRecord(record.id)}><TrashIcon /></RowActionIcon>}
         </div>
@@ -873,10 +871,6 @@ function LetterIcon() {
 
 function BellIcon() {
   return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M10 2.5a1 1 0 0 0-1 1v.6C6.6 4.6 5 6.6 5 9v3l-1.5 2h13L15 12V9c0-2.4-1.6-4.4-4-4.9V3.5a1 1 0 0 0-1-1Z" /><path d="M8 16a2 2 0 0 0 4 0" /></svg>
-}
-
-function DownloadIcon() {
-  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M10 3v9.5M6.5 9l3.5 3.5L13.5 9" /><path d="M3.5 14v1.5a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V14" /></svg>
 }
 
 function UploadIcon() {

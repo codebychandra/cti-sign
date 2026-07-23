@@ -32,20 +32,24 @@ async function getZohoToken(env: Env): Promise<string> {
 }
 
 // The Candidates module holds CTI's entire recruiting history — tens of
-// thousands of records, ~5-8s per 200-record page from Zoho. A full or even
-// status-filtered unpaginated fetch (tested: 4,399 matches just for the 4
-// "active" statuses below) takes 100+ seconds and can't run inside a single
-// request. Instead: filter to active onboarding statuses server-side via
-// Zoho's /search + criteria, sort by most-recently-updated first, and cap
-// the number of pages pulled — bounding worst-case latency regardless of
-// how large the underlying table grows. Most relevant records (the ones
-// someone actually needs to copy into a new letter right now) sort first.
+// thousands of records, ~5-8s per 200-record page from Zoho. Filtering to
+// just the active onboarding statuses (below) still matches 4,399 records
+// company-wide. Hermes' own Master Data feed additionally scopes to
+// CTI_Office = 'CTI Indonesia' (the office this app's seafarers come
+// through) — matching that filter here brings the real count to 2,342,
+// confirmed against Zoho directly. No page cap: this mirrors Hermes'
+// existing feed exactly rather than an arbitrary slice of it. A cold
+// fetch takes ~85s (12 pages), which is why results are cached 10 min in
+// KV — only a manual Refresh or a stale cache pays that cost.
+// MAX_PAGES is a runaway-loop backstop only, not a practical limit.
 const ACTIVE_ONBOARDING_STATUSES = ['Completing Documents', 'Ready to Go', 'Report to Ship', 'Rescheduled']
-const MAX_PAGES = 3
+const CTI_OFFICE = 'CTI Indonesia'
+const MAX_PAGES = 50
 const PER_PAGE = 200
 
-function buildActiveStatusCriteria(): string {
-  return `(${ACTIVE_ONBOARDING_STATUSES.map((s) => `(Onboarding_Status:equals:${s})`).join('or')})`
+function buildActiveCandidatesCriteria(): string {
+  const statusOr = `(${ACTIVE_ONBOARDING_STATUSES.map((s) => `(Onboarding_Status:equals:${s})`).join('or')})`
+  return `(${statusOr}and(CTI_Office:equals:${CTI_OFFICE}))`
 }
 
 async function fetchActiveCandidates(token: string): Promise<{ records: Record<string, unknown>[]; truncated: boolean }> {
@@ -55,7 +59,7 @@ async function fetchActiveCandidates(token: string): Promise<{ records: Record<s
   // URLSearchParams.set() encodes its value itself — don't pre-encode here,
   // or the criteria string gets double-encoded and Zoho silently matches
   // nothing instead of erroring.
-  const criteria = buildActiveStatusCriteria()
+  const criteria = buildActiveCandidatesCriteria()
   while (more && page <= MAX_PAGES) {
     const u = new URL(`${ZOHO_RECRUIT}/Candidates/search`)
     u.searchParams.set('criteria', criteria)
